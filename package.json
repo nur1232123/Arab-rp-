@@ -1,0 +1,19 @@
+{
+  "name": "arab-rp",
+  "version": "0.1.0",
+  "description": "Arab RP — мобильная мультиплеерная RP-игра",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "license": "ISC",
+  "dependencies": {
+    "express": "^4.22.3",
+    "three": "^0.170.0",
+    "ws": "^8.23.0"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  }
+}

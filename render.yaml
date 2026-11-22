@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: arab-rp
+    runtime: node
+    plan: free
+    region: frankfurt
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
