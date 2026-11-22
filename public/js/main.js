@@ -8,6 +8,10 @@ import { buildWorld, makeTargetBeam, textSprite, U } from './build.js';
 import { makeCar, animateCar, setCarNight, loadCarModels } from './cars.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { makeChar, animateChar } from './char.js';
+import { loadHuman, humanReady, makeHuman, animateHuman } from './human.js';
+// настоящий персонаж, а пока он грузится — простой
+const createChar = look => (humanReady() ? makeHuman(look) : makeChar(look));
+const animChar = (ch, speed, air, dt, t, dead = false) => (ch.userData.human ? animateHuman(ch, speed, air, dt, dead) : animateChar(ch, speed, air, dt, t));
 
 const $ = id => document.getElementById(id);
 const store = { get(k) { try { return localStorage.getItem(k); } catch { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch {} } };
@@ -120,6 +124,10 @@ function init() {
   beam = makeTargetBeam(); scene.add(beam);
   const pmrem = new THREE.PMREMGenerator(renderer);
   scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+  loadHuman().then(() => { // заменяем простых человечков на настоящих
+    if (me.char && me.profile) { scene.remove(me.char); me.char = createChar({ outfit: me.profile.outfit, skin: me.profile.skin }); scene.add(me.char); me.char.visible = me.mode === 'foot'; }
+    for (const o of others.values()) { scene.remove(o.char); o.char = createChar({ outfit: o.look.outfit, skin: o.look.skin }); scene.add(o.char); }
+  }).catch(() => {});
   loadCarModels().then(() => { // когда 3D-модели загрузились — заменяем временные машины
     if (car.mesh && me.profile && car.mesh.userData.type !== me.profile.car) { scene.remove(car.mesh); car.mesh = makeCar(me.profile.car, me.profile.color); scene.add(car.mesh); }
     for (const o of others.values()) if (o.car && o.car.userData.type !== o.look.car) rebuildOtherCar(o);
@@ -135,7 +143,7 @@ document.querySelectorAll('[data-q]').forEach(b => b.onclick = () => { quality =
 function buildMe() {
   const p = me.profile;
   if (me.char) scene.remove(me.char);
-  me.char = makeChar({ outfit: p.outfit, skin: p.skin }); scene.add(me.char);
+  me.char = createChar({ outfit: p.outfit, skin: p.skin }); scene.add(me.char); me.char.visible = me.mode === 'foot';
   if (car.mesh) scene.remove(car.mesh);
   car.mesh = makeCar(p.car, p.color); scene.add(car.mesh);
 }
@@ -206,7 +214,7 @@ function addOther(p) {
   if (others.has(p.id)) return;
   const st = { x: p.x, y: p.y, z: p.z, ry: p.ry, s: 0, a: 0, cx: p.cx ?? p.x, cy: p.cy ?? p.y, cz: p.cz ?? p.z, cry: p.cry ?? p.ry };
   const o = { id: p.id, name: p.name, mode: p.mode || 0, look: { car: p.car, color: p.color, outfit: p.outfit, skin: p.skin }, t: st, c: { ...st } };
-  o.char = makeChar({ outfit: p.outfit, skin: p.skin }); scene.add(o.char);
+  o.char = createChar({ outfit: p.outfit, skin: p.skin }); scene.add(o.char);
   o.label = textSprite(p.name, { scale: 0.42 }); scene.add(o.label);
   others.set(p.id, o); rebuildOtherCar(o);
 }
@@ -627,7 +635,7 @@ function loop(now) {
   animateCar(car.mesh, car.speed, -car.steer * 1.3, dt, car.braking, night);
   if (inCar) { me.x = car.x; me.z = car.z; me.y = car.y; }
   me.char.position.set(me.x, me.y, me.z); me.char.rotation.y = me.ry;
-  animateChar(me.char, me.spd, !me.onGround, dt, now / 1000);
+  animChar(me.char, me.spd, !me.onGround, dt, now / 1000, me.dead);
 
   // другие игроки
   const a = 1 - Math.exp(-dt * 10);
@@ -640,10 +648,10 @@ function loop(now) {
     placeCar(o.car, c.cx, c.cz, c.cry);
     animateCar(o.car, o.mode ? tg.s : 0, 0, dt, false, night);
     o.char.visible = !o.mode;
-    if (!o.mode) { o.char.position.set(c.x, c.y, c.z); o.char.rotation.y = c.ry; animateChar(o.char, Math.abs(tg.s), !!tg.a, dt, now / 1000); }
+    if (!o.mode) { o.char.position.set(c.x, c.y, c.z); o.char.rotation.y = c.ry; animChar(o.char, Math.abs(tg.s), !!tg.a, dt, now / 1000); }
     const lx = o.mode ? c.cx : c.x, lz = o.mode ? c.cz : c.z;
     o.label.position.set(lx, (o.mode ? o.car.position.y + 2.6 : c.y + 2.25), lz);
-    o.label.visible = Math.hypot(lx - camera.position.x, lz - camera.position.z) < 120;
+    { const dl = Math.hypot(lx - camera.position.x, lz - camera.position.z); o.label.visible = dl < 120 && dl > 3; }
   }
 
   updateCam(dt, now);
