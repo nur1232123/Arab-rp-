@@ -1,18 +1,23 @@
 // Общее описание мира: используется и клиентом, и сервером.
-// Всё детерминировано (одинаковый seed), поэтому карта у всех игроков одна и та же.
+// Всё детерминировано, поэтому карта у всех игроков одинаковая.
 
-export const HALF = 4000;           // карта 8 x 8 км (от -4000 до 4000 м)
-export const LIMIT = 3950;          // граница, за которую нельзя выехать
-export const BLOCK = 80;            // размер городского квартала, м
-export const STREET_W = 14;         // ширина улицы
-export const HWY_W = 20;            // ширина трассы
+export const HALF = 4000;          // карта 8 x 8 км
+export const LIMIT = 3950;
+export const BLOCK = 72;           // шаг городской сетки
+export const STREET_W = 12;        // ширина проезжей части
+export const SIDEWALK = 3.5;       // тротуар внутри квартала
+export const HWY_W = 18;
+export const ROAD_Y = 0.3;         // дорога над землёй
+export const CURB = 0.18;          // высота бордюра
+export const DAY_MS = 24 * 60 * 1000; // игровые сутки = 24 минуты
+export const FOOD_PRICE = 25;
 
 export const CITIES = [
-  { id: 'amman',  ar: 'عمّان',   ru: 'Амман',   en: 'Amman',  x: -2400, z: -2200, r: 650, style: 'amman'  },
-  { id: 'riyadh', ar: 'الرياض',  ru: 'Эр-Рияд', en: 'Riyadh', x: 0,     z: 300,   r: 760, style: 'riyadh' },
-  { id: 'dubai',  ar: 'دبي',     ru: 'Дубай',   en: 'Dubai',  x: 2750,  z: 650,   r: 650, style: 'dubai'  },
-  { id: 'doha',   ar: 'الدوحة',  ru: 'Доха',    en: 'Doha',   x: 2250,  z: -2450, r: 560, style: 'doha'   },
-  { id: 'jeddah', ar: 'جدة',     ru: 'Джидда',  en: 'Jeddah', x: -2750, z: 2400,  r: 600, style: 'jeddah' },
+  { id: 'amman',  ar: 'عمّان',  ru: 'Амман',   en: 'AMMAN',  x: -2400, z: -2200, r: 560, style: 'amman'  },
+  { id: 'riyadh', ar: 'الرياض', ru: 'Эр-Рияд', en: 'RIYADH', x: 0,     z: 300,   r: 640, style: 'riyadh' },
+  { id: 'dubai',  ar: 'دبي',    ru: 'Дубай',   en: 'DUBAI',  x: 2780,  z: 650,   r: 580, style: 'dubai'  },
+  { id: 'doha',   ar: 'الدوحة', ru: 'Доха',    en: 'DOHA',   x: 2250,  z: -2450, r: 500, style: 'doha'   },
+  { id: 'jeddah', ar: 'جدة',    ru: 'Джидда',  en: 'JEDDAH', x: -2780, z: 2400,  r: 540, style: 'jeddah' },
 ];
 export const CITY = Object.fromEntries(CITIES.map(c => [c.id, c]));
 
@@ -21,16 +26,17 @@ export const HIGHWAY_LINKS = [
   ['riyadh', 'dubai'], ['riyadh', 'doha'], ['doha', 'dubai'],
 ];
 
-// Машины (вымышленные модели в стиле машин, популярных у арабских игроков)
 export const CARS = {
-  ghazal: { ar: 'غزال',  ru: 'Газаль (седан)',     price: 0,     max: 42, accel: 9,  steer: 0.55 },
-  dhib:   { ar: 'ذيب',   ru: 'Зиб (пикап)',        price: 6000,  max: 45, accel: 10, steer: 0.5  },
-  saqr:   { ar: 'صقر',   ru: 'Сакр (внедорожник)', price: 18000, max: 52, accel: 11, steer: 0.48 },
-  barq:   { ar: 'برق',   ru: 'Барк (спорткар)',    price: 45000, max: 68, accel: 16, steer: 0.5  },
+  ghazal: { ar: 'غزال', ru: 'Газаль (седан)',     price: 0,     max: 44, accel: 9,  steer: 0.55 },
+  dhib:   { ar: 'ذيب',  ru: 'Зиб (пикап)',        price: 6000,  max: 46, accel: 10, steer: 0.5  },
+  saqr:   { ar: 'صقر',  ru: 'Сакр (внедорожник)', price: 18000, max: 54, accel: 11, steer: 0.48 },
+  barq:   { ar: 'برق',  ru: 'Барк (спорткар)',    price: 45000, max: 72, accel: 16, steer: 0.5  },
 };
 export const COLORS = ['#f4f4f2', '#16171a', '#b9bec4', '#c9a54a', '#9b1c1c', '#1f4e8c', '#2f5d3a', '#7a5a3a'];
+export const OUTFITS = ['thobe_red', 'thobe_white', 'casual'];
+export const SKINS = ['#e9c39b', '#c99a6e', '#a87449', '#7a4e2d'];
 
-// ---------- случайные числа с seed ----------
+// ---------- математика ----------
 export function rng(seed) {
   let s = seed >>> 0;
   return () => {
@@ -42,10 +48,22 @@ export function rng(seed) {
   };
 }
 export const smooth = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+const hash = (i, j) => { const s = Math.sin(i * 127.1 + j * 311.7) * 43758.5453; return s - Math.floor(s); };
+export function noise2(x, z) {
+  const i = Math.floor(x), j = Math.floor(z), fx = x - i, fz = z - j;
+  const u = fx * fx * (3 - 2 * fx), v = fz * fz * (3 - 2 * fz);
+  const a = hash(i, j), b = hash(i + 1, j), c = hash(i, j + 1), d = hash(i + 1, j + 1);
+  return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
+}
+function ridged(x, z) {
+  let s = 0, amp = 0.55, f = 1;
+  for (let o = 0; o < 4; o++) { const n = 1 - Math.abs(noise2(x * f, z * f) * 2 - 1); s += n * n * amp; amp *= 0.5; f *= 2.03; }
+  return s;
+}
 
 // ---------- побережья ----------
-export const coastE = z => 3600 + 100 * Math.sin(z / 530) + 40 * Math.sin(z / 170);   // Персидский залив
-export const coastW = z => -3600 - 100 * Math.sin(z / 610 + 1) - 40 * Math.sin(z / 190); // Красное море
+export const coastE = z => 3600 + 100 * Math.sin(z / 530) + 40 * Math.sin(z / 170);
+export const coastW = z => -3600 - 100 * Math.sin(z / 610 + 1) - 40 * Math.sin(z / 190);
 
 // ---------- дороги ----------
 function buildHighways() {
@@ -63,7 +81,6 @@ function buildHighways() {
     return { a, b, pts, w: HWY_W };
   });
 }
-
 function buildStreets() {
   const out = [];
   for (const c of CITIES) {
@@ -78,11 +95,9 @@ function buildStreets() {
   }
   return out;
 }
-
 export const HIGHWAYS = buildHighways();
 export const STREETS = buildStreets();
 
-// Сетка отрезков для быстрого поиска «как далеко до дороги»
 class SegGrid {
   constructor(cell) { this.cell = cell; this.map = new Map(); }
   key(i, j) { return i * 100003 + j; }
@@ -94,7 +109,6 @@ class SegGrid {
       const k = this.key(i, j); let a = this.map.get(k); if (!a) this.map.set(k, a = []); a.push(s);
     }
   }
-  // расстояние от точки до края ближайшей дороги (отрицательное = на дороге); ищем в радиусе одной клетки
   dist(x, z) {
     const c = this.cell, ci = Math.floor(x / c), cj = Math.floor(z / c); let best = 1e9;
     for (let i = ci - 1; i <= ci + 1; i++) for (let j = cj - 1; j <= cj + 1; j++) {
@@ -109,12 +123,29 @@ class SegGrid {
     return best;
   }
 }
-
 export const HWY_GRID = new SegGrid(150);
 for (const h of HIGHWAYS) for (let i = 0; i < h.pts.length - 1; i++) HWY_GRID.add(...h.pts[i], ...h.pts[i + 1], h.w);
 export const ROAD_GRID = new SegGrid(150);
 for (const h of HIGHWAYS) for (let i = 0; i < h.pts.length - 1; i++) ROAD_GRID.add(...h.pts[i], ...h.pts[i + 1], h.w);
 for (const s of STREETS) ROAD_GRID.add(...s.pts[0], ...s.pts[1], s.w);
+
+// ---------- остановки на трассах: заправка и деревня ----------
+export const STOPS = HIGHWAYS.map((h, k) => {
+  const i = Math.floor(h.pts.length * 0.5), p = h.pts[i], q = h.pts[i + 1];
+  let dx = q[0] - p[0], dz = q[1] - p[1]; const l = Math.hypot(dx, dz); dx /= l; dz /= l;
+  const nx = -dz, nz = dx;
+  return {
+    hwy: k, ry: Math.atan2(dx, dz), dx, dz, nx, nz,
+    gas: { x: p[0] + nx * 34, z: p[1] + nz * 34 },
+    village: { x: p[0] - nx * 150, z: p[1] - nz * 150 },
+  };
+});
+
+// горы (подальше от городов, трассы прорезают их ущельями)
+const MOUNTAINS = [
+  { x: -3250, z: -100, r: 1250 }, { x: 600, z: -2600, r: 900 },
+  { x: -600, z: 2750, r: 900 },   { x: 1350, z: 2250, r: 700 },
+];
 
 // ---------- рельеф ----------
 export function cityMask(x, z) {
@@ -127,39 +158,100 @@ export function nearestCity(x, z) {
   for (const c of CITIES) { const d = Math.hypot(x - c.x, z - c.z); if (d < bd) { bd = d; best = c; } }
   return { city: best, d: bd, inside: bd < best.r + 40 };
 }
+function stopMask(x, z) {
+  let m = 1;
+  for (const s of STOPS) {
+    m = Math.min(m, smooth(60, 140, Math.hypot(x - s.gas.x, z - s.gas.z)), smooth(130, 230, Math.hypot(x - s.village.x, z - s.village.z)));
+  }
+  return m;
+}
+export const villageFlat = (x, z) => 1 - stopMask(x, z);
 
 export function height(x, z) {
-  // холмы Аммана (дороги идут по ним)
   const A = CITY.amman, da = Math.hypot(x - A.x, z - A.z);
   let h = 0;
-  const hm = 1 - smooth(650, 1500, da);
+  const hm = 1 - smooth(600, 1450, da);
   if (hm > 0) h += hm * (13 * Math.sin(x / 170 + 1.3) * Math.cos(z / 210) + 7 * Math.sin((x + z) / 125) + 21);
-  // барханы в пустыне, подальше от дорог и городов
   const cm = cityMask(x, z);
   if (cm < 1) {
     const rd = HWY_GRID.dist(x, z);
-    const mask = smooth(25, 230, rd) * (1 - cm);
-    if (mask > 0) {
-      const s = Math.sin(x / 95 + Math.sin(z / 140) * 1.7) * 0.5 + 0.5;
-      h += mask * (s * s * 9 + 2.5 * Math.sin(z / 61 + x / 210) + 2.5);
+    const free = (1 - cm) * stopMask(x, z);
+    if (free > 0) {
+      const mask = smooth(25, 230, rd) * free;
+      if (mask > 0) {
+        const s = Math.sin(x / 95 + Math.sin(z / 140) * 1.7) * 0.5 + 0.5;
+        h += mask * (s * s * 9 + 2.5 * Math.sin(z / 61 + x / 210) + 2.5);
+      }
+      for (const M of MOUNTAINS) {
+        const d = Math.hypot(x - M.x, z - M.z); if (d > M.r) continue;
+        const mm = (1 - smooth(M.r * 0.35, M.r, d)) * smooth(45, 380, rd) * free;
+        if (mm > 0) h += mm * (25 + 165 * ridged(x / 420 + M.x, z / 420 + M.z));
+      }
     }
   }
-  // побережья
-  const eE = x - coastE(z), eW = coastW(z) - x, e = Math.max(eE, eW);
+  const e = Math.max(x - coastE(z), coastW(z) - x);
   if (e > -320) h = h * (1 - smooth(-320, -50, e)) - 7 * smooth(-50, 110, e);
   return h;
 }
-
-// ---------- точки для работы, спавна и салонов ----------
-export function cityPoints(c) {
-  return {
-    spawn:    { x: c.x,         z: c.z + BLOCK * 0.5 },
-    office:   { x: c.x + BLOCK, z: c.z + BLOCK * 0.5 },
-    showroom: { x: c.x - BLOCK, z: c.z - BLOCK * 0.5 },
-  };
+export function mountainAmount(x, z) {
+  let m = 0;
+  for (const M of MOUNTAINS) { const d = Math.hypot(x - M.x, z - M.z); m = Math.max(m, 1 - smooth(M.r * 0.35, M.r, d)); }
+  return m;
 }
 
-// случайная точка на улице города (место доставки)
+// ---------- кварталы ----------
+const blockCache = new Map();
+export function blockValid(c, i, j) {
+  const key = c.id + i + ',' + j;
+  let v = blockCache.get(key);
+  if (v === undefined) {
+    const x = c.x + (i + 0.5) * BLOCK, z = c.z + (j + 0.5) * BLOCK;
+    v = Math.hypot(x - c.x, z - c.z) < c.r - 45 && HWY_GRID.dist(x, z) > (BLOCK - STREET_W) * 0.72;
+    blockCache.set(key, v);
+  }
+  return v;
+}
+// квартал (с тротуаром) под точкой, или null
+export function blockAt(x, z) {
+  for (const c of CITIES) {
+    const lx = x - c.x, lz = z - c.z;
+    if (Math.abs(lx) > c.r || Math.abs(lz) > c.r) continue;
+    const i = Math.floor(lx / BLOCK), j = Math.floor(lz / BLOCK);
+    const mx = lx - i * BLOCK, mz = lz - j * BLOCK, hw = STREET_W / 2;
+    if (mx < hw || mx > BLOCK - hw || mz < hw || mz > BLOCK - hw) return null;
+    if (!blockValid(c, i, j)) return null;
+    return { c, i, j, cx: c.x + (i + 0.5) * BLOCK, cz: c.z + (j + 0.5) * BLOCK };
+  }
+  return null;
+}
+// высота поверхности, по которой ходят и ездят
+export function groundY(x, z) {
+  const h = height(x, z);
+  if (blockAt(x, z)) return h + ROAD_Y + CURB;
+  if (ROAD_GRID.dist(x, z) < 0.3) return h + ROAD_Y;
+  return h;
+}
+
+// ---------- точки интереса ----------
+// точки интереса стоят на улицах между двумя настоящими кварталами, подальше от трасс
+const cpCache = {};
+export function cityPoints(c) {
+  if (cpCache[c.id]) return cpCache[c.id];
+  const cands = [];
+  for (let i = -3; i <= 3; i++) for (let j = -4; j <= 3; j++) {
+    if (!blockValid(c, i - 1, j) || !blockValid(c, i, j)) continue;
+    const x = c.x + i * BLOCK + 3, z = c.z + (j + 0.5) * BLOCK;
+    if (HWY_GRID.dist(x, z) < 40) continue;
+    cands.push({ x, z, d: Math.hypot(x - c.x, z - c.z) });
+  }
+  cands.sort((a, b) => a.d - b.d);
+  const out = [];
+  for (const p of cands) { if (out.every(q => Math.hypot(q.x - p.x, q.z - p.z) > 60)) out.push(p); if (out.length === 4) break; }
+  while (out.length < 4) out.push({ x: c.x + 3 + out.length * BLOCK, z: c.z + BLOCK * 0.5 });
+  return (cpCache[c.id] = { spawn: out[0], office: out[1], showroom: out[2], food: out[3] });
+}
+export const FOOD_SPOTS = [...CITIES.map(c => cityPoints(c).food), ...STOPS.map(s => ({ x: s.gas.x + s.dx * 14, z: s.gas.z + s.dz * 14 }))];
+
 export function streetPoint(cityId, R = Math.random) {
   const list = STREETS.filter(s => s.city === cityId);
   for (let k = 0; k < 20; k++) {
