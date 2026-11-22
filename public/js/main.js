@@ -5,7 +5,8 @@ import {
   height, groundY, cityMask, nearestCity, coastE, coastW, cityPoints, FOOD_SPOTS,
 } from '../shared/world.js';
 import { buildWorld, makeTargetBeam, textSprite, U } from './build.js';
-import { makeCar, animateCar, setCarNight } from './cars.js';
+import { makeCar, animateCar, setCarNight, loadCarModels } from './cars.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { makeChar, animateChar } from './char.js';
 
 const $ = id => document.getElementById(id);
@@ -115,8 +116,14 @@ function init() {
   Object.assign(sun.shadow.camera, { left: -70, right: 70, top: 70, bottom: -70, near: 1, far: 400 });
   scene.add(sun, sun.target);
   world = buildWorld(scene);
-  Object.assign(window.__ar, { r: renderer, setHour: h => { const d = DAY_MS; timeOff = Math.round(((h / 24 - 0.3 + 1) % 1) * d - (Date.now() % d)); } });
+  Object.assign(window.__ar, { r: renderer, testCar: (type, color) => { scene.remove(car.mesh); car.mesh = makeCar(type, color); scene.add(car.mesh); me.profile.car = type; return car.mesh.userData.type; }, setHour: h => { const d = DAY_MS; timeOff = Math.round(((h / 24 - 0.3 + 1) % 1) * d - (Date.now() % d)); } });
   beam = makeTargetBeam(); scene.add(beam);
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+  loadCarModels().then(() => { // когда 3D-модели загрузились — заменяем временные машины
+    if (car.mesh && me.profile && car.mesh.userData.type !== me.profile.car) { scene.remove(car.mesh); car.mesh = makeCar(me.profile.car, me.profile.color); scene.add(car.mesh); }
+    for (const o of others.values()) if (o.car && o.car.userData.type !== o.look.car) rebuildOtherCar(o);
+  });
   drawMapCanvas();
   applyQuality();
   addEventListener('resize', () => { renderer.setSize(innerWidth, innerHeight); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); });
@@ -570,6 +577,7 @@ function updateSky(tx, tz) {
   const sm = world.sky.material.uniforms; sm.uTop.value.copy(_top); sm.uHor.value.copy(_hor); sm.uSun.value.copy(sunDir);
   scene.fog.color.copy(_hor);
   U.uNight.value = night;
+  scene.environmentIntensity = 0.15 + 0.75 * (1 - night);
   world.glow.opacity = night * 0.85; world.glow.visible = night > 0.02;
   setCarNight(night);
   hemi.intensity = 0.35 + 1.25 * (1 - night);

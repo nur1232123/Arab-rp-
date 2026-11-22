@@ -2,6 +2,56 @@
 // Вперёд = +Z. Детали одного цвета склеены, чтобы машина рисовалась за ~10 вызовов.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
+import { CARS } from '../shared/world.js';
+
+// ---------- готовые 3D-модели (GLB) ----------
+const MODELS = {};          // имя -> { scene, len, W, wr }
+let modelsReady = null;
+export function loadCarModels() {
+  if (modelsReady) return modelsReady;
+  const loader = new GLTFLoader(); loader.setMeshoptDecoder(MeshoptDecoder);
+  const names = [...new Set(Object.values(CARS).map(c => c.model).filter(Boolean))];
+  modelsReady = Promise.all(names.map(n => loader.loadAsync(`/models/${n}.glb`).then(g => {
+    const root = g.scene;
+    root.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = false; } });
+    const body = new THREE.Box3();
+    root.traverse(o => { if (o.isMesh && !/wheel_/.test(o.parent?.name || '') && !/wheel_/.test(o.name)) body.expandByObject(o); });
+    const size = body.getSize(new THREE.Vector3());
+    let wr = 0.33; const fl = root.getObjectByName('wheel_FL');
+    if (fl) { const b = new THREE.Box3().setFromObject(fl); wr = (b.max.y - b.min.y) / 2; }
+    MODELS[n] = { scene: root, len: size.z, W: Math.min(size.x, 2.05), wr };
+  }).catch(e => console.warn('model', n, e)))).then(() => MODELS);
+  return modelsReady;
+}
+export const modelReady = type => !CARS[type]?.model || !!MODELS[CARS[type].model];
+
+function makeModelCar(type, color) {
+  const M0 = MODELS[CARS[type].model];
+  const g = new THREE.Group(), root = M0.scene.clone(true);
+  const paint = new THREE.MeshStandardMaterial({ color, metalness: 0.6, roughness: 0.28 });
+  let light = new THREE.MeshStandardMaterial({ color: 0xfff6dc }), tail = new THREE.MeshStandardMaterial({ color: 0xb01010, transparent: true, opacity: 0.85 });
+  root.traverse(o => {
+    if (!o.isMesh) return;
+    const n = o.material.name;
+    if (n === 'paint') { if (o.material.map) paint.map = o.material.map; o.material = paint; }
+    else if (n === 'headlight') { light = o.material = o.material.clone(); light.emissive = new THREE.Color(0); }
+    else if (n === 'taillight') { tail = o.material = o.material.clone(); tail.emissive = new THREE.Color(0); }
+  });
+  g.add(root);
+  const sh = new THREE.Mesh(shadowGeo, M.shadow); sh.scale.set(M0.W + 0.4, 1, M0.len + 0.5); sh.position.y = 0.04; g.add(sh);
+  const wheels = [];
+  for (const q of ['FL', 'FR', 'RL', 'RR']) {
+    const w = root.getObjectByName('wheel_' + q); if (!w) continue;
+    const pivot = new THREE.Group(); pivot.position.copy(w.position); w.parent.add(pivot);
+    w.position.set(0, 0, 0); pivot.add(w); pivot.userData.front = q[0] === 'F'; wheels.push(pivot);
+  }
+  const hb = new THREE.Mesh(new THREE.PlaneGeometry(5, 11).rotateX(-Math.PI / 2), headBeam()); hb.position.set(0, 0.08, M0.len / 2 + 5.3); hb.rotation.y = Math.PI; g.add(hb);
+  g.userData = { wheels, wr: M0.wr, paint, light, tail, type, len: M0.len, W: M0.W, model: true };
+  return g;
+}
+
 
 // профили: lower — кузов до линии окон, gh — стеклянная часть [низ лобового, перед крыши, зад крыши, низ заднего]
 const SHAPES = {
@@ -99,6 +149,7 @@ function headBeam() {
 export function setCarNight(n) { const m = headBeam(); m.opacity = n * 0.75; m.visible = n > 0.05; }
 
 export function makeCar(type = 'ghazal', color = '#f4f4f2') {
+  if (CARS[type]?.model) { if (MODELS[CARS[type].model]) return makeModelCar(type, color); type = 'ghazal'; } // пока модель грузится — временная машина
   const S = SHAPES[type] || SHAPES.ghazal, P = parts(type in SHAPES ? type : 'ghazal');
   const g = new THREE.Group();
   const paint = new THREE.MeshPhongMaterial({ color, shininess: 70, specular: 0x444444 });
@@ -116,7 +167,7 @@ export function makeCar(type = 'ghazal', color = '#f4f4f2') {
     pivot.add(w); pivot.position.set(sx * (S.W / 2 - 0.1), S.wr, sz * S.wb);
     pivot.userData.front = sz > 0; g.add(pivot); wheels.push(pivot);
   }
-  g.userData = { wheels, wr: S.wr, paint, light, tail, type, len, W: S.W, doorZ: (S.gh[0][0] + S.gh[1][0]) / 2 - 0.4 };
+  g.userData = { wheels, wr: S.wr, paint, light, tail, type, len, W: S.W };
   return g;
 }
 

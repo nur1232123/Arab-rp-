@@ -31,6 +31,8 @@ export const CARS = {
   dhib:   { ar: 'ذيب',  ru: 'Зиб (пикап)',        price: 6000,  max: 46, accel: 10, steer: 0.5  },
   saqr:   { ar: 'صقر',  ru: 'Сакр (внедорожник)', price: 18000, max: 54, accel: 11, steer: 0.48 },
   barq:   { ar: 'برق',  ru: 'Барк (спорткар)',    price: 45000, max: 72, accel: 16, steer: 0.5  },
+  sahm:   { ar: 'سهم',  ru: 'Сахм (спорт-седан)', price: 30000, max: 70, accel: 14, steer: 0.5,  model: 'bmw' },
+  asifa:  { ar: 'عاصفة', ru: 'Асифа (суперкар)',  price: 120000, max: 92, accel: 21, steer: 0.48, model: 'pagani' },
 };
 export const COLORS = ['#f4f4f2', '#16171a', '#b9bec4', '#c9a54a', '#9b1c1c', '#1f4e8c', '#2f5d3a', '#7a5a3a'];
 export const OUTFITS = ['thobe_red', 'thobe_white', 'casual'];
