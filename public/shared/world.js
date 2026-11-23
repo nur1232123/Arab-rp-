@@ -11,6 +11,10 @@ export const ROAD_Y = 0.3;         // дорога над землёй
 export const CURB = 0.18;          // высота бордюра
 export const DAY_MS = 24 * 60 * 1000; // игровые сутки = 24 минуты
 export const FOOD_PRICE = 25;
+export const TP_PRICE = 250;            // такси между городами (телепорт с карты)
+export const LOAD_PAY = 20;             // грузчик: плата за одну коробку
+export const TEST_MS = 60 * 1000;       // тест-драйв в автосалоне
+export const SHOWROOM_R = 15;           // на каком расстоянии от салона можно покупать
 
 export const CITIES = [
   { id: 'amman',  ar: 'عمّان',  ru: 'Амман',   en: 'AMMAN',  x: -2400, z: -2200, r: 560, style: 'amman'  },
@@ -34,9 +38,59 @@ export const CARS = {
   sahm:   { ar: 'سهم',  ru: 'Сахм (спорт-седан)', price: 30000, max: 70, accel: 14, steer: 0.5,  model: 'bmw' },
   asifa:  { ar: 'عاصفة', ru: 'Асифа (суперкар)',  price: 120000, max: 92, accel: 21, steer: 0.48, model: 'pagani' },
 };
+// автосалоны трёх классов: в каждом городе свой салон эконом, средний и элитный
+export const CAR_TIER = { ghazal: 0, dhib: 0, saqr: 1, sahm: 1, barq: 2, asifa: 2 };
+export const SHOWROOMS = ['showroomLow', 'showroom', 'showroomHigh']; // точки города: эконом, средний, элитный
 export const COLORS = ['#f4f4f2', '#16171a', '#b9bec4', '#c9a54a', '#9b1c1c', '#1f4e8c', '#2f5d3a', '#7a5a3a'];
-export const OUTFITS = ['thobe_red', 'thobe_white', 'casual'];
 export const SKINS = ['#e9c39b', '#c99a6e', '#a87449', '#7a4e2d'];
+// ---------- одежда ----------
+// одежда — тело, головной убор, цвет ткани, борода, очки. Цены: 0 — даётся сразу.
+export const OUTFITS = ['thobe', 'bisht', 'casual', 'sport', 'suit'];
+export const HEADS = ['shemagh', 'ghutra', 'black', 'taqiyah', 'cap', 'none'];
+export const CLOTH_COLORS = ['#f6f6f2', '#e6dcc6', '#b8b3a8', '#5d6168', '#2c3850', '#6b4a32', '#1d1d1f', '#8c1f24', '#2f5d3a'];
+export const CLOTHES = {
+  outfit: { thobe: 0, casual: 0, sport: 900, suit: 3500, bisht: 6000 },
+  head: { shemagh: 0, ghutra: 0, none: 0, taqiyah: 150, cap: 250, black: 400 },
+  extra: { glasses: 500 },
+};
+export const DEFAULT_LOOK = { outfit: 'thobe', head: 'shemagh', cloth: CLOTH_COLORS[0], beard: true, glasses: false };
+
+// ---------- машина: бензин, поломки, тюнинг ----------
+export const FUEL_PRICE = 2;                 // $ за 1% бака
+export const REPAIR_PRICE = 6;               // $ за 1% здоровья машины
+export const TUNE_PRICES = [4000, 9000, 18000]; // двигатель: уровни 1, 2, 3
+export const tuned = (type, lvl = 0) => { const s = CARS[type]; return { ...s, max: s.max * (1 + 0.07 * lvl), accel: s.accel * (1 + 0.12 * lvl) }; };
+export const fuelUse = type => (CARS[type].max / 50) / 140; // % бака на метр: седан ~16 км на бак, суперкар ~8 км
+
+// ---------- товары магазинов 24/7 и ларьков ----------
+export const ITEMS = {
+  water:  { price: 5,   food: 10 },
+  snack:  { price: 15,  food: 30 },
+  medkit: { price: 150, hp: 40 },
+  can:    { price: 60,  fuel: 30 },
+  rkit:   { price: 250, chp: 35 },
+};
+export const ITEM_MAX = 10;
+export const SHOP_ITEMS = ['water', 'snack', 'medkit', 'can', 'rkit'];
+export const KIOSK_ITEMS = ['water', 'snack'];
+// стартовые наборы на экране входа (старые профили хранили их в поле outfit)
+export const PRESETS = {
+  thobe_red: { outfit: 'thobe', head: 'shemagh' },
+  thobe_white: { outfit: 'thobe', head: 'ghutra' },
+  casual: { outfit: 'casual', head: 'none', cloth: '#2c3850' },
+};
+// приводит любой присланный вид к допустимому
+export function cleanLook(l = {}) {
+  const p = PRESETS[l.outfit] || {};
+  const o = { ...DEFAULT_LOOK, ...p };
+  if (OUTFITS.includes(l.outfit)) o.outfit = l.outfit;
+  if (HEADS.includes(l.head)) o.head = l.head;
+  if (CLOTH_COLORS.includes(l.cloth)) o.cloth = l.cloth;
+  if (typeof l.beard === 'boolean') o.beard = l.beard;
+  if (typeof l.glasses === 'boolean') o.glasses = l.glasses;
+  return o;
+}
+export const owns = (wardrobe, kind, id) => !CLOTHES[kind]?.[id] || (wardrobe || []).includes(kind + ':' + id);
 
 // ---------- математика ----------
 export function rng(seed) {
@@ -248,11 +302,33 @@ export function cityPoints(c) {
   }
   cands.sort((a, b) => a.d - b.d);
   const out = [];
-  for (const p of cands) { if (out.every(q => Math.hypot(q.x - p.x, q.z - p.z) > 60)) out.push(p); if (out.length === 4) break; }
-  while (out.length < 4) out.push({ x: c.x + 3 + out.length * BLOCK, z: c.z + BLOCK * 0.5 });
-  return (cpCache[c.id] = { spawn: out[0], office: out[1], showroom: out[2], food: out[3] });
+  const N = 11;
+  for (const p of cands) { if (out.every(q => Math.hypot(q.x - p.x, q.z - p.z) > 60)) out.push(p); if (out.length === N) break; }
+  // в маленьком городе места меньше — добираем точки с меньшим отступом
+  for (const p of cands) { if (out.length >= N) break; if (out.every(q => Math.hypot(q.x - p.x, q.z - p.z) > 36)) out.push(p); }
+  while (out.length < N) out.push({ x: c.x + 3 + out.length * BLOCK, z: c.z + BLOCK * 0.5 });
+  // склад грузчиков: груда коробок и грузовик дальше по той же улице
+  const wh = out[4], whDrop = { x: wh.x, z: wh.z + 22 };
+  return (cpCache[c.id] = {
+    spawn: out[0], office: out[1], showroom: out[2], food: out[3], wh, whDrop, clothes: out[5],
+    gas: out[6], shop: out[7], tech: out[8], showroomLow: out[9], showroomHigh: out[10],
+  });
 }
 export const FOOD_SPOTS = [...CITIES.map(c => cityPoints(c).food), ...STOPS.map(s => ({ x: s.gas.x + s.dx * 14, z: s.gas.z + s.dz * 14 }))];
+// заправки: одна в каждом городе и на каждой трассе (колонки)
+export const GAS_SPOTS = [...CITIES.map(c => cityPoints(c).gas), ...STOPS.map(s => ({ x: s.gas.x - s.nx * 3, z: s.gas.z - s.nz * 3 }))];
+// ларьки на тротуарах: по 4 в городе, рядом с перекрёстками
+export const KIOSKS = [];
+CITIES.forEach((c, ci) => {
+  const R = rng(5000 + ci * 31), n = Math.floor(c.r / BLOCK), P = cityPoints(c), busy = Object.values(P);
+  for (let tries = 0, k = 0; tries < 200 && k < 4; tries++) {
+    const i = Math.floor((R() * 2 - 1) * (n - 1)), j = Math.floor((R() * 2 - 1) * (n - 1));
+    if (!blockValid(c, i, j)) continue;
+    const x = c.x + (i + 0.5) * BLOCK + 12, z = c.z + j * BLOCK + STREET_W / 2 + 1.9;
+    if (busy.some(q => Math.hypot(q.x - x, q.z - z) < 25)) continue;
+    KIOSKS.push({ x, z, city: c.id }); busy.push({ x, z }); k++;
+  }
+});
 
 export function streetPoint(cityId, R = Math.random) {
   const list = STREETS.filter(s => s.city === cityId);

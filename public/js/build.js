@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 import {
   HALF, CITIES, CITY, BLOCK, STREET_W, SIDEWALK, ROAD_Y, CURB, HIGHWAYS, STREETS, STOPS, HWY_GRID,
-  height, cityMask, coastE, coastW, rng, smooth, cityPoints, blockValid, mountainAmount, villageFlat, FOOD_SPOTS,
+  height, cityMask, coastE, coastW, rng, smooth, cityPoints, blockValid, mountainAmount, villageFlat, FOOD_SPOTS, KIOSKS,
 } from '../shared/world.js';
 
 export const U = { uNight: { value: 0 } }; // общая «ночь» для всех материалов
@@ -62,10 +62,10 @@ class Batch {
     else for (let k = 0; k < t.count; k++) this.idx[this.ni + k] = b + k;
     this.n += t.count; this.ni += nIdx;
   }
-  raw(pos, idx, col) { // произвольная сетка, нормаль вверх
+  raw(pos, idx, col, win = 0) { // произвольная сетка, нормаль вверх
     const nv = pos.length / 3; this.ensure(nv, idx.length); const b = this.n;
     this.pos.set(pos, b * 3);
-    for (let i = 0; i < nv; i++) { const o = (b + i) * 3; this.nor[o] = 0; this.nor[o + 1] = 1; this.nor[o + 2] = 0; this.col[o] = col.r; this.col[o + 1] = col.g; this.col[o + 2] = col.b; this.win[b + i] = 0; }
+    for (let i = 0; i < nv; i++) { const o = (b + i) * 3; this.nor[o] = 0; this.nor[o + 1] = 1; this.nor[o + 2] = 0; this.col[o] = col.r; this.col[o + 1] = col.g; this.col[o + 2] = col.b; this.win[b + i] = win; }
     for (let k = 0; k < idx.length; k++) this.idx[this.ni + k] = b + idx[k];
     this.n += nv; this.ni += idx.length;
   }
@@ -146,23 +146,77 @@ function hook(mat, frag) {
   return mat;
 }
 function materials(atlas) {
+  // фасады рисуются шейдером: окна, рамы, подоконники, карнизы, ставни, стеклянные башни.
+  // aWin: 1 — жилой дом, 2 — стеклянная башня, 3 — вилла. Ни одного лишнего треугольника.
   const bld = hook(new THREE.MeshLambertMaterial({ vertexColors: true }), {
-    head: 'float hash2(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}',
+    head: `float hash2(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
+      float box2(vec2 p, vec2 a, vec2 b){ return step(a.x,p.x)*step(p.x,b.x)*step(a.y,p.y)*step(p.y,b.y); }`,
     color: `float gWin = 0.0; float gLit = 0.0;
       if (vWin > 0.5) {
         if (abs(vWN.y) < 0.5) {
           float u = abs(vWN.x) > abs(vWN.z) ? vWP.z : vWP.x;
-          float fy = fract(vWP.y / 3.3), fx = fract(u / 3.1);
-          gWin = step(0.3, fy) * step(fy, 0.84) * step(0.16, fx) * step(fx, 0.84);
-          float r = hash2(vec2(floor(u / 3.1) + floor(vWN.x * 3.0 + vWN.z * 7.0) * 17.0, floor(vWP.y / 3.3)) + floor(vWP.x * 0.02) + floor(vWP.z * 0.02) * 3.0);
-          gLit = step(0.45, r);
-          vec3 glass = mix(vec3(0.15, 0.2, 0.26), diffuseColor.rgb * 0.5, 0.3) + 0.06 * (r - 0.5);
-          diffuseColor.rgb = mix(diffuseColor.rgb, glass, gWin * 0.88);
+          float side = floor(vWN.x * 3.0 + vWN.z * 7.0) * 17.0;
+          float fl = floor(vWP.y / 3.3), fy = fract(vWP.y / 3.3);
+          float bid = floor(vWP.x * 0.02) + floor(vWP.z * 0.02) * 3.0;          // «номер дома» для разнообразия
+          float tone = hash2(vec2(bid, side)) * 0.08 - 0.04;
+          // крупные пятна и подтёки: стены не идеально ровные
+          float stain = hash2(floor(vec2(u * 0.25, vWP.y * 0.12)) + bid) * 0.05;
+          diffuseColor.rgb *= 1.0 + tone - stain;
+          if (vWin < 1.5) {
+            // жилой дом: окна с рамой и подоконником, карниз на каждом этаже
+            float cell = floor(u / 3.1), fx = fract(u / 3.1);
+            float r = hash2(vec2(cell + side, fl) + bid);
+            vec2 q = vec2(fx, fy);
+            float frame = box2(q, vec2(0.13, 0.27), vec2(0.87, 0.87));
+            gWin = box2(q, vec2(0.17, 0.31), vec2(0.83, 0.84));
+            float sill = box2(q, vec2(0.1, 0.22), vec2(0.9, 0.27));
+            float ledge = step(fy, 0.05);
+            float shut = step(0.82, hash2(vec2(cell * 3.1 + side, fl + bid)));   // закрытые ставни
+            gLit = step(0.45, r) * (1.0 - shut);
+            vec3 glass = mix(vec3(0.13, 0.17, 0.22), vec3(0.42, 0.52, 0.6), fy * 0.6) + 0.07 * (r - 0.5);
+            vec3 shutter = mix(diffuseColor.rgb * 0.62, vec3(0.32, 0.36, 0.3), 0.4) * (0.85 + 0.15 * step(0.5, fract(fy * 9.0)));
+            diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 1.12, (frame - gWin) + sill);
+            diffuseColor.rgb = mix(diffuseColor.rgb, mix(glass, shutter, shut), gWin);
+            diffuseColor.rgb *= 1.0 - ledge * 0.22;
+          } else if (vWin < 2.5) {
+            // стеклянная башня: сплошное стекло, тонкие стойки, небо отражается сверху светлее
+            float cell = floor(u / 1.6), fx = fract(u / 1.6);
+            float r = hash2(vec2(cell + side, fl) + bid);
+            float mull = max(step(fx, 0.06), step(fy, 0.07));
+            gWin = 1.0 - mull;
+            gLit = step(0.55, r);
+            float refl = clamp(vWP.y / 220.0, 0.0, 1.0);
+            vec3 glass = diffuseColor.rgb * (0.55 + 0.25 * refl) + vec3(0.05, 0.08, 0.12) * refl + 0.05 * (r - 0.5);
+            diffuseColor.rgb = mix(diffuseColor.rgb * 0.75, glass, gWin);
+          } else {
+            // вилла: редкие высокие окна с арками и деревянной решёткой (машрабия)
+            float cell = floor(u / 4.6), fx = fract(u / 4.6);
+            float r = hash2(vec2(cell + side, fl) + bid);
+            vec2 q = vec2(fx, fy);
+            float arch = step(length((q - vec2(0.5, 0.72)) * vec2(1.0, 1.4)), 0.17);
+            gWin = max(box2(q, vec2(0.33, 0.22), vec2(0.67, 0.72)), arch * step(0.72, fy));
+            float grid = step(0.75, fract(fx * 22.0)) + step(0.75, fract(fy * 16.0));
+            gLit = step(0.5, r);
+            vec3 wood = vec3(0.36, 0.24, 0.14) * (0.85 + 0.15 * clamp(grid, 0.0, 1.0));
+            float mash = step(0.55, r);
+            vec3 glass = vec3(0.14, 0.18, 0.22);
+            diffuseColor.rgb = mix(diffuseColor.rgb, mix(glass, wood, mash * clamp(grid, 0.0, 1.0)), gWin);
+            diffuseColor.rgb *= 1.0 - step(fy, 0.04) * 0.18;
+          }
         } else diffuseColor.rgb *= 0.82;
       }`,
     emit: 'totalEmissiveRadiance += vec3(1.0, 0.78, 0.45) * gWin * gLit * uNight * 0.9;',
   });
-  const plain = new THREE.MeshLambertMaterial({ vertexColors: true });
+  // тротуары: плитка (aWin = 4 на горизонтальных площадках)
+  const plain = hook(new THREE.MeshLambertMaterial({ vertexColors: true }), {
+    head: 'float th(vec2 p){return fract(sin(dot(p,vec2(41.3,289.1)))*15731.743);}',
+    color: `if (vWin > 3.5 && vWN.y > 0.8) {
+        vec2 t = vWP.xz / 1.2, f = fract(t);
+        float seam = max(step(f.x, 0.05), step(f.y, 0.05));
+        diffuseColor.rgb *= (0.94 + 0.08 * th(floor(t))) * (1.0 - seam * 0.18);
+      }`,
+    emit: '',
+  });
   const emit = hook(new THREE.MeshLambertMaterial({ vertexColors: true }), { head: '', color: '', emit: 'totalEmissiveRadiance += diffuseColor.rgb * uNight * 1.6;' });
   const sign = hook(new THREE.MeshLambertMaterial({ map: atlas, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }), { head: '', color: '', emit: 'totalEmissiveRadiance += diffuseColor.rgb * uNight * 0.75;' });
   const glow = new THREE.MeshBasicMaterial({ map: glowTex(), vertexColors: true, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -6 });
@@ -306,16 +360,23 @@ function house(x, z, w, d, floors, col, faces, S, R, lift) {
       put('det', T.box, fx + nx * 0.9, g0 + 2.6, fz + nz * 0.9, nx ? 1.8 : aw, 0.12, nx ? aw : 1.8, ac, 0, 0, 0);
       const k = Math.floor(R() * (SHOPS.length - 1));
       put('sign', T.plane, fx + nx * 0.08, g0 + 3.5, fz + nz * 0.08, aw * 0.8, aw * 0.8 * 92 / 504, 1, '#ffffff', ry, 0, 0, shopRect(k));
+      // витрина под навесом: тёмное стекло, ночью светится тёплым светом
+      put('detEmit', T.box, fx + nx * 0.06, g0 + 0.05, fz + nz * 0.06, nx ? 0.1 : aw - 0.6, 2.35, nx ? aw - 0.6 : 0.1, '#4a4436');
+    } else if (fi === 0) {
+      // входная дверь с козырьком
+      const off = (R() - 0.5) * (fw - 4);
+      put('det', T.box, fx + nx * 0.05 + tx * off, g0, fz + nz * 0.05 + tz * off, nx ? 0.1 : 1.3, 2.3, nx ? 1.3 : 0.1, R() < 0.5 ? '#5a3a22' : '#3b4a52');
+      put('det', T.box, fx + nx * 0.45 + tx * off, g0 + 2.45, fz + nz * 0.45 + tz * off, nx ? 0.9 : 1.9, 0.1, nx ? 1.9 : 0.9, shade(col, 0.8));
     }
   });
 }
 
 function tower(x, z, w, d, floors, col, S, R, gy, cyl) {
   const H = floors * 3.3;
-  put('bld', cyl ? T.tower : T.box, x, gy - 0.5, z, w, H, d, col, 0, 1);
+  put('bld', cyl ? T.tower : T.box, x, gy - 0.5, z, w, H, d, col, 0, 2);
   collide(x, z, w + (cyl ? 0 : 6), d + (cyl ? 0 : 6), gy + H);
   const r = R();
-  if (r < 0.35 && !cyl) put('bld', T.box, x, gy + H, z, w * 0.7, H * (0.12 + R() * 0.25), d * 0.7, col, 0, 1);
+  if (r < 0.35 && !cyl) put('bld', T.box, x, gy + H, z, w * 0.7, H * (0.12 + R() * 0.25), d * 0.7, col, 0, 2);
   else if (r < 0.55) put('det', T.box, x, gy + H, z, w * 0.85, 2.2, d * 0.85, shade(col, 0.7));
   if (R() < 0.5) put('det', T.cyl, x, gy + H, z, 0.4, 10 + R() * 25, 0.4, '#cccccc');
   if (!cyl) put('bld', T.box, x, gy - 0.5, z, w + 6, 5.5, d + 6, S.pal[0], 0, 1);
@@ -323,7 +384,7 @@ function tower(x, z, w, d, floors, col, S, R, gy, cyl) {
 
 function villa(x, z, size, col, streetFaces, R, gy, palms) {
   const w = size * (0.5 + R() * 0.12), d = size * (0.42 + R() * 0.1), H = 2 * 3.3 + 0.5;
-  put('bld', T.box, x, gy - 0.3, z, w, H, d, col, 0, 1);
+  put('bld', T.box, x, gy - 0.3, z, w, H, d, col, 0, 3);
   collide(x, z, w, d, gy + H);
   put('det', T.box, x, gy + H - 0.3, z, w + 0.6, 0.45, d + 0.6, shade(col, 0.85));
   const hs = size / 2 - 0.3, wc = shade(col, 0.88), wh = 2.3;
@@ -375,7 +436,7 @@ function lamp(x, z, nx, nz) {
 }
 
 // площадка по рельефу (тротуар, газон, парковка) с бортиком
-function patch(kind, x0, z0, x1, z1, n, yOff, col, skirt = 0) {
+function patch(kind, x0, z0, x1, z1, n, yOff, col, skirt = 0, win = 0) {
   const pos = [], idx = [];
   for (let j = 0; j <= n; j++) for (let i = 0; i <= n; i++) {
     const x = x0 + (x1 - x0) * i / n, z = z0 + (z1 - z0) * j / n;
@@ -385,7 +446,7 @@ function patch(kind, x0, z0, x1, z1, n, yOff, col, skirt = 0) {
     const a = j * (n + 1) + i, b = a + 1, c = a + n + 1, d = c + 1;
     idx.push(a, c, b, b, c, d);
   }
-  ch((x0 + x1) / 2, (z0 + z1) / 2)[kind].raw(pos, idx, C(col));
+  ch((x0 + x1) / 2, (z0 + z1) / 2)[kind].raw(pos, idx, C(col), win);
   if (skirt) { // бортик по периметру, повторяет рельеф
     const cc = C(shade(col, 0.8)).clone();
     const edges = [[x0, z0, x1, z0], [x1, z0, x1, z1], [x1, z1, x0, z1], [x0, z1, x0, z0]];
@@ -453,7 +514,19 @@ export function buildWorld(scene) {
   }
   tg.setAttribute('color', new THREE.Float32BufferAttribute(cols, 3));
   tg.computeVertexNormals();
-  const terrain = new THREE.Mesh(tg, new THREE.MeshLambertMaterial({ vertexColors: true }));
+  // песок: мелкая рябь от ветра и пятна, чтобы пустыня не была гладкой заливкой
+  const terrainMat = hook(new THREE.MeshLambertMaterial({ vertexColors: true }), {
+    head: 'float tn(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.0-2.0*f);float a=fract(sin(dot(i,vec2(127.1,311.7)))*43758.5),b=fract(sin(dot(i+vec2(1,0),vec2(127.1,311.7)))*43758.5),c=fract(sin(dot(i+vec2(0,1),vec2(127.1,311.7)))*43758.5),d=fract(sin(dot(i+vec2(1,1),vec2(127.1,311.7)))*43758.5);return mix(mix(a,b,f.x),mix(c,d,f.x),f.y);}',
+    color: `{
+        float rip = sin(vWP.x * 1.7 + sin(vWP.z * 0.35) * 2.0 + tn(vWP.xz * 0.2) * 3.0) * 0.5 + 0.5;
+        float big = tn(vWP.xz * 0.012) * 0.6 + tn(vWP.xz * 0.05) * 0.4;
+        float slope = 1.0 - clamp(vWN.y, 0.0, 1.0);
+        diffuseColor.rgb *= 0.9 + big * 0.16 + rip * 0.05 * (1.0 - slope * 3.0);
+        diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.78, 0.7, 0.62), clamp(slope * 2.5, 0.0, 0.6));
+      }`,
+    emit: '',
+  });
+  const terrain = new THREE.Mesh(tg, terrainMat);
   terrain.receiveShadow = true; scene.add(terrain);
 
   const water = new THREE.Mesh(new THREE.PlaneGeometry(HALF * 2.6, HALF * 2.6).rotateX(-Math.PI / 2),
@@ -492,7 +565,7 @@ export function buildWorld(scene) {
       }
       const x0 = bx - U2 / 2, x1 = bx + U2 / 2, z0 = bz - U2 / 2, z1 = bz + U2 / 2;
       const gy = gyAt(bx, bz);
-      patch('plain', x0, z0, x1, z1, 6, ROAD_Y + CURB, '#cbc4b6', ROAD_Y + CURB + 0.3);
+      patch('plain', x0, z0, x1, z1, 6, ROAD_Y + CURB, '#cbc4b6', ROAD_Y + CURB + 0.3, 4);
       lamp(bx, z0 + 0.6, 0, -1); lamp(x0 + 0.6, bz, -1, 0);
       if (dc < c.r * 0.45) {
         const tx = x0 + 0.8, tz = z0 + 0.8;
@@ -551,15 +624,15 @@ export function buildWorld(scene) {
 
   // Достопримечательности
   const dub = LMK.dubai;
-  if (dub) { let y = 0; for (const [r, h] of [[19, 120], [16, 105], [12.5, 90], [9.5, 80], [6.5, 65], [4, 50], [1.3, 110]]) { put(r > 3 ? 'bld' : 'plain', T.tower, dub.x, y, dub.z, r * 2, h, r * 2, '#c9d6df', 0, r > 3 ? 1 : 0); y += h; } collide(dub.x, dub.z, 40, 40); }
+  if (dub) { let y = 0; for (const [r, h] of [[19, 120], [16, 105], [12.5, 90], [9.5, 80], [6.5, 65], [4, 50], [1.3, 110]]) { put(r > 3 ? 'bld' : 'plain', T.tower, dub.x, y, dub.z, r * 2, h, r * 2, '#c9d6df', 0, r > 3 ? 2 : 0); y += h; } collide(dub.x, dub.z, 40, 40); }
   const ry = LMK.riyadh;
   if (ry) {
-    put('bld', T.box, ry.x, 0, ry.z, 44, 205, 28, '#8fa6b4', 0, 1);
-    put('bld', T.box, ry.x - 16.5, 205, ry.z, 11, 85, 28, '#8fa6b4', 0, 1); put('bld', T.box, ry.x + 16.5, 205, ry.z, 11, 85, 28, '#8fa6b4', 0, 1);
+    put('bld', T.box, ry.x, 0, ry.z, 44, 205, 28, '#8fa6b4', 0, 2);
+    put('bld', T.box, ry.x - 16.5, 205, ry.z, 11, 85, 28, '#8fa6b4', 0, 2); put('bld', T.box, ry.x + 16.5, 205, ry.z, 11, 85, 28, '#8fa6b4', 0, 2);
     put('plain', T.box, ry.x, 262, ry.z, 22, 5, 8, '#c7d1d8'); collide(ry.x, ry.z, 44, 28);
   }
   const dh = LMK.doha;
-  if (dh) { put('bld', T.tower, dh.x, 0, dh.z, 38, 205, 38, '#6f9bb5', 0, 1); put('plain', T.cone, dh.x, 205, dh.z, 38, 45, 38, '#6f9bb5'); collide(dh.x, dh.z, 38, 38); }
+  if (dh) { put('bld', T.tower, dh.x, 0, dh.z, 38, 205, 38, '#6f9bb5', 0, 2); put('plain', T.cone, dh.x, 205, dh.z, 38, 45, 38, '#6f9bb5'); collide(dh.x, dh.z, 38, 38); }
   let flag = null;
   const fp = LMK.amman;
   if (fp) {
@@ -660,8 +733,24 @@ export function buildWorld(scene) {
     list.forEach((it, k) => { f(o, it); o.updateMatrix(); im.setMatrixAt(k, o.matrix); });
     im.frustumCulled = false; im.castShadow = true; scene.add(im); return im;
   };
-  inst(new THREE.IcosahedronGeometry(1, 0), new THREE.MeshLambertMaterial({ color: '#8a8749', flatShading: true }), bushes, (o, [x, z, s]) => { o.position.set(x, height(x, z) + s * 0.3, z); o.scale.set(s, s * 0.6, s); o.rotation.set(0, x, 0); });
-  inst(new THREE.DodecahedronGeometry(1, 0), new THREE.MeshLambertMaterial({ color: '#8f7660', flatShading: true }), rocks, (o, [x, z, s]) => { o.position.set(x, height(x, z) + s * 0.2, z); o.scale.set(s, s * 0.7, s * 1.2); o.rotation.set(x, z, 0); });
+  // кусты и камни: рисуем только ближние (список пересобирается, когда игрок отходит)
+  const scatter = [];
+  const near1 = (geo, mat, list, f) => {
+    const im = inst(geo, mat, list, f), all = im.instanceMatrix.array.slice(), xs = list.map(p => p[0]), zs = list.map(p => p[1]);
+    scatter.push({ im, all, xs, zs });
+  };
+  near1(new THREE.IcosahedronGeometry(1, 0), new THREE.MeshLambertMaterial({ color: '#8a8749', flatShading: true }), bushes, (o, [x, z, s]) => { o.position.set(x, height(x, z) + s * 0.3, z); o.scale.set(s, s * 0.6, s); o.rotation.set(0, x, 0); });
+  near1(new THREE.DodecahedronGeometry(1, 0), new THREE.MeshLambertMaterial({ color: '#8f7660', flatShading: true }), rocks, (o, [x, z, s]) => { o.position.set(x, height(x, z) + s * 0.2, z); o.scale.set(s, s * 0.7, s * 1.2); o.rotation.set(x, z, 0); });
+  let scX = 1e9, scZ = 1e9, scR = 0;
+  const updateScatter = (x, z, R) => {
+    if (Math.hypot(x - scX, z - scZ) < R * 0.25 && R === scR) return;
+    scX = x; scZ = z; scR = R;
+    for (const s of scatter) {
+      const dst = s.im.instanceMatrix.array; let n = 0;
+      for (let k = 0; k < s.xs.length; k++) if (Math.abs(s.xs[k] - x) < R && Math.abs(s.zs[k] - z) < R) { dst.set(s.all.subarray(k * 16, k * 16 + 16), n * 16); n++; }
+      s.im.count = n; s.im.instanceMatrix.needsUpdate = true;
+    }
+  };
   const cb = new Batch();
   const cm = (x, y, z, w, h, d, rx = 0) => { _e.set(rx, 0, 0); _q.setFromEuler(_e); _m.compose(_p.set(x, y, z), _q, _s.set(w, h, d)); cb.add(T.box, _m, C('#c49a62')); };
   cm(0, 1.5, 0, 0.9, 0.8, 2.0); cm(0, 2.2, -0.15, 0.7, 0.55, 0.8); cm(0, 1.9, 1.05, 0.35, 1.1, 0.35, -0.5); cm(0, 2.75, 1.5, 0.35, 0.35, 0.75);
@@ -680,6 +769,21 @@ export function buildWorld(scene) {
   for (const list of palmCells.values()) for (const [geo, m] of [[trunkGeo, trunkMat], [crownGeo, crownMat]]) {
     const im = inst(geo, m, list, palmF); im.frustumCulled = true; im.computeBoundingSphere();
     palmLod.push({ m: im, x: list[0][0], z: list[0][1] });
+  }
+
+  // Заправки в городах: навес и две колонки на тротуаре
+  for (const c of CITIES) {
+    const P = cityPoints(c), gx = P.gas.x + 5.5, gz = P.gas.z, gy = gyAt(gx, gz);
+    put('plain', T.box, gx, gy + 3.6, gz, 2.6, 0.4, 9, '#f2f2f2'); put('emit', T.box, gx, gy + 3.5, gz, 2.7, 0.15, 9.1, '#d62828');
+    for (const s of [-1, 1]) { put('plain', T.box, gx, gy, gz + s * 3, 0.7, 1.6, 0.5, '#d62828'); put('plain', T.box, gx + 0.9, gy, gz + s * 4.2, 0.25, 3.6, 0.25, '#e8e8e8'); collide(gx, gz + s * 3, 0.9, 0.7, 1e4, true); }
+  }
+  // Ларьки: будка с навесом и тёплым окошком на тротуаре
+  for (const k of KIOSKS) {
+    const gy = gyAt(k.x, k.z), col = ['#1f6f8b', '#b03a2e', '#1e8449', '#ca6f1e'][Math.floor(Math.abs(k.x * 7 + k.z)) % 4];
+    put('plain', T.box, k.x, gy, k.z + 0.5, 2.6, 2.3, 1.6, '#e9e4d8');
+    put('det', T.box, k.x, gy + 2.3, k.z - 0.1, 3.0, 0.12, 1.4, col);
+    put('detEmit', T.box, k.x, gy + 1.0, k.z - 0.31, 1.8, 0.9, 0.04, '#5a4a30');
+    collide(k.x, k.z + 0.5, 2.6, 1.6, gy + 2.3, true);
   }
 
   // Чанки в сцену
@@ -711,9 +815,17 @@ export function buildWorld(scene) {
   for (const c of CITIES) {
     const P = cityPoints(c);
     addMarker('office', c.id, P.office, '#ffcc33', 'توصيل');
+    addMarker('showroomLow', c.id, P.showroomLow, '#7fd1ff', 'سيارات اقتصادية');
     addMarker('showroom', c.id, P.showroom, '#3fa9ff', 'معرض السيارات');
+    addMarker('showroomHigh', c.id, P.showroomHigh, '#f0b429', 'سيارات فاخرة');
+    addMarker('wh', c.id, P.wh, '#c48a4a', 'مستودع');
+    addMarker('clothes', c.id, P.clothes, '#c77dff', 'ملابس');
+    addMarker('gas', c.id, P.gas, '#ff3b30', 'محطة وقود');
+    addMarker('shop', c.id, P.shop, '#34c759', 'سوبرماركت 24/7');
+    addMarker('tech', c.id, P.tech, '#ff9f0a', 'مركز صيانة');
   }
   FOOD_SPOTS.forEach(p => addMarker('food', null, p, '#ff7b39', 'شاورما'));
+  for (const k of KIOSKS) addMarker('kiosk', k.city, { x: k.x, z: k.z - 1.6 }, '#ffd60a', 'كشك');
 
   // Сетка коллизий
   const CG = 40, cgrid = new Map();
@@ -731,7 +843,7 @@ export function buildWorld(scene) {
   };
 
   lod.push(...palmLod.map(p => ({ ...p, far: true })));
-  return { sky, water, markers, near, flag, lod, glow: MAT.glow, stats: { colliders: colliders.length, palms: palms.length } };
+  return { sky, water, markers, near, flag, lod, updateScatter, glow: MAT.glow, stats: { colliders: colliders.length, palms: palms.length } };
 }
 
 function jordanFlag() {

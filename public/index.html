@@ -66,6 +66,7 @@ input{font:inherit}
 .bar .tr{width:150px;height:9px;border-radius:6px;background:rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.25);overflow:hidden}
 .bar .fl{height:100%;width:100%;transition:width .3s}
 #hpF{background:linear-gradient(90deg,#9d0208,var(--hp))}#foodF{background:linear-gradient(90deg,#c35a00,var(--food))}
+#stamF{background:linear-gradient(90deg,#1c6fb8,#4fb3ff);transition:none}#stamF.tired{background:#8a9aa8}
 .menu{display:flex;gap:6px;margin-top:6px}
 .ib{width:42px;height:42px;border-radius:12px;background:var(--panel);border:1px solid var(--line);display:grid;place-items:center}
 .ib svg{width:21px;height:21px;fill:none;stroke:#fff;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
@@ -116,9 +117,51 @@ input{font:inherit}
 .seg{display:flex;gap:6px}.seg button{padding:7px 14px;border-radius:10px;background:#2a231b;border:1px solid var(--line);font-weight:700}
 .seg button.on{background:var(--gold);color:#2a1700}
 .keys{font-size:13px;opacity:.75;line-height:1.8;margin-top:10px}
+#test{position:absolute;left:50%;top:max(10px,env(safe-area-inset-top));transform:translateX(-50%);background:rgba(20,40,80,.88);border:1px solid #3fa9ff;border-radius:14px;padding:6px 14px;display:flex;gap:12px;align-items:center;direction:rtl}
+#test button{font-size:13px;background:rgba(255,255,255,.16);border-radius:8px;padding:3px 10px}
+.tps button:disabled{opacity:.4}
+
+/* ---------- 3D-автосалон: окно прозрачное, за ним крутится машина ---------- */
+.modal.shop{background:linear-gradient(90deg,transparent 45%,rgba(0,0,0,.55));display:block;padding:0;pointer-events:none;direction:ltr}
+.shop>*{pointer-events:auto}
+.shTop{position:absolute;left:max(14px,env(safe-area-inset-left));right:max(14px,env(safe-area-inset-right));display:flex;justify-content:space-between;align-items:center;font-size:22px;font-weight:900;text-shadow:0 2px 4px #000;pointer-events:none}
+.shTop .x{pointer-events:auto}
+.shInfo{position:absolute;right:max(16px,env(safe-area-inset-right));top:72px;width:min(300px,40vw);display:flex;flex-direction:column;gap:6px;direction:rtl;text-align:right}
+.shInfo b{font-size:30px;line-height:1.1}
+.shInfo small{opacity:.75;font-size:13px;min-height:1em}
+.shInfo .pr{font-family:Rubik,sans-serif;font-weight:900;font-size:26px;color:var(--money);direction:ltr;text-align:right}
+.spec{display:grid;grid-template-columns:70px 1fr 66px;gap:6px;align-items:center;font-size:12px}
+.spec .tr{height:8px;border-radius:5px;background:rgba(255,255,255,.15);overflow:hidden}
+.spec .fl{height:100%;background:linear-gradient(90deg,var(--gold),var(--gold2))}
+.spec em{font-style:normal;opacity:.8;direction:ltr;text-align:left}
+.shInfo .sw{margin-top:4px}
+.shInfo .sw button{width:30px;height:30px}
+.shBtns{display:flex;gap:8px;margin-top:6px}
+.shBtns .play{flex:1;height:46px;font-size:18px}
+.shBtns .play:disabled{background:#444;color:#999;box-shadow:none}
+#shTest{padding:0 14px;height:46px;border-radius:14px;background:rgba(63,169,255,.25);border:1px solid #3fa9ff;font-weight:900}
+.shop .cars{position:absolute;left:max(14px,env(safe-area-inset-left));right:max(14px,env(safe-area-inset-right));display:flex;gap:8px;overflow-x:auto;touch-action:pan-x;direction:rtl}
+.shop .carc{flex:0 0 auto;min-width:96px;padding:6px 10px;color:#fff}
+.shop .carc b{font-size:17px}.shop .carc small{margin:0}
+.sheet.small{width:min(460px,100%)}
+.srow{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 2px;border-bottom:1px solid var(--line)}
+.srow b{display:block;font-size:16px}.srow small{opacity:.7;font-size:12.5px}
+.srow button{flex:0 0 auto;padding:8px 12px;border-radius:10px;background:var(--gold);color:#2a1700;font-weight:900;font-size:13.5px}
+.srow button:disabled{background:#444;color:#999}
+#carStat{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(max(12px,env(safe-area-inset-bottom)) + 118px);display:flex;gap:14px}
+#carStat .tr{width:70px}
+#fuelF{background:linear-gradient(90deg,#c77700,#ffb020)}#chpF{background:linear-gradient(90deg,#4a8a2a,#9fd36a)}
+#fuelF.low,#chpF.low{background:#e5383b}
+.chips{display:flex;flex-wrap:wrap;gap:5px}
+.chip{padding:4px 9px;border-radius:9px;background:rgba(255,255,255,.1);border:1px solid var(--line);font-size:12.5px;font-weight:700}
+.chip.on{background:var(--gold);color:#2a1700;border-color:var(--gold)}
+.chip small{opacity:.75;font-size:11px;margin-inline-start:3px}
 #loading{position:fixed;inset:0;z-index:60;display:grid;place-items:center;background:#0b0809;font-size:22px;font-weight:900}
 @media (max-height:520px){.logo{font-size:38px}.sub{margin:2px 0 8px;font-size:15px}.reg{gap:8px;padding:12px}.opt{padding:5px 4px;font-size:13px}.opt i{height:22px;width:22px}.reg input{height:42px;font-size:16px}.play{height:46px;font-size:19px}.note{display:none}.skins button{width:34px;height:34px}}
 @media (orientation:landscape) and (max-height:560px){#map .sheet{display:grid;grid-template-columns:auto minmax(150px,220px);grid-template-rows:auto 1fr;gap:0 14px;width:auto;max-width:100%}#map h2{grid-column:1/-1}#bigmap{height:calc(100vh - 110px);width:auto;max-height:none}#map .tps{flex-direction:column;justify-content:flex-start;margin-top:0}}
+/* телефон горизонтально: вход должен влезать целиком вместе с кнопкой */
+@media (max-height:440px){#login{padding:8px 16px;align-items:start}.logo{font-size:30px}.sub{display:none}.reg{gap:6px;padding:10px}.reg label{font-size:12px}.reg input{height:38px;margin-top:2px}.opt{padding:4px;font-size:12.5px}.opt i{display:none}.skins button{width:30px;height:30px}.langs button{padding:4px 12px}.play{height:44px;font-size:18px}
+  .shInfo{top:58px;gap:3px}.shTop{font-size:18px}.shInfo b{font-size:24px}.shInfo .pr{font-size:21px}.shBtns .play,#shTest{height:40px}.shInfo .sw button{width:26px;height:26px}}
 @media (max-height:440px){#mini,#radarBox{width:112px}#mini{height:112px}#chatlog{top:160px}#joy{width:132px;height:132px}.cb{width:64px;height:64px}.cb.big{width:76px;height:76px}#gas{height:108px;width:82px}#brake{width:72px;height:72px}#money{font-size:25px}.bar .tr{width:120px}#action{bottom:170px}#speedo{width:150px;height:106px}}
 </style>
 </head>
@@ -131,13 +174,13 @@ input{font:inherit}
     <div class="sub" data-i="subtitle">عرب رول بلاي</div>
     <div class="reg">
       <div><label data-i="nick">اسم الشخصية</label><input id="name" maxlength="20" autocomplete="off" data-ph="namePh" placeholder="Ahmed_Alsaadi"></div>
-      <div><label data-i="outfit">الملابس</label>
+      <div class="newOnly"><label data-i="outfit">الملابس</label>
         <div class="opts" id="outfits">
           <button class="opt" data-o="thobe_red"><i style="background:repeating-conic-gradient(#c0182a 0 25%,#f4f1ea 0 50%) 0 0/10px 10px"></i><span data-i="o1">ثوب وشماغ</span></button>
           <button class="opt" data-o="thobe_white"><i style="background:#fbfbf8"></i><span data-i="o2">ثوب وغترة</span></button>
           <button class="opt" data-o="casual"><i style="background:linear-gradient(#2c5d8f 50%,#2d3d5c 50%)"></i><span data-i="o3">كاجوال</span></button>
         </div></div>
-      <div class="row2"><div><label data-i="skin">لون البشرة</label><div class="skins" id="skins"></div></div>
+      <div class="row2"><div class="newOnly"><label data-i="skin">لون البشرة</label><div class="skins" id="skins"></div></div>
         <div class="langs"><button data-lang="ar">العربية</button><button data-lang="ru">Русский</button></div></div>
       <button class="play" id="play" data-i="play">دخول اللعبة</button>
     </div>
@@ -155,8 +198,10 @@ input{font:inherit}
     <div id="money">$0</div>
     <div class="bar"><div class="tr"><div class="fl" id="hpF"></div></div><svg viewBox="0 0 24 24"><path fill="#e5383b" d="M12 21s-8-5.2-8-11a4.5 4.5 0 0 1 8-2.8A4.5 4.5 0 0 1 20 10c0 5.8-8 11-8 11z"/></svg></div>
     <div class="bar"><div class="tr"><div class="fl" id="foodF"></div></div><svg viewBox="0 0 24 24"><path fill="#f48c06" d="M4 11h16a8 8 0 0 1-16 0zm2-2c0-3 3-5 6-5s6 2 6 5z"/></svg></div>
+    <div class="bar hide" id="stamBar"><div class="tr"><div class="fl" id="stamF"></div></div><svg viewBox="0 0 24 24"><path fill="#4fb3ff" d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg></div>
     <div class="menu p">
       <button class="ib" id="bMap" aria-label="map"><svg viewBox="0 0 24 24"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/></svg></button>
+      <button class="ib" id="bInv" aria-label="bag"><svg viewBox="0 0 24 24"><path d="M5 8h14l-1 12H6zM9 8V6a3 3 0 0 1 6 0v2"/></svg></button>
       <button class="ib" id="bChat" aria-label="chat"><svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></svg></button>
       <button class="ib" id="bCar" aria-label="car"><svg viewBox="0 0 24 24"><path d="M3 15l2-6h14l2 6v4H3zM7 19v1M17 19v1"/><circle cx="7.5" cy="15.5" r="1"/><circle cx="16.5" cy="15.5" r="1"/></svg></button>
       <button class="ib" id="bCam" aria-label="camera"><svg viewBox="0 0 24 24"><path d="M3 8h4l2-3h6l2 3h4v11H3z"/><circle cx="12" cy="13" r="3.5"/></svg></button>
@@ -165,28 +210,65 @@ input{font:inherit}
     </div>
   </div>
   <div id="job" class="hide sa-t p"><b id="jobT"></b><span id="jobS"></span><br><button id="jobX" data-i="cancel">إلغاء</button></div>
+  <div id="test" class="hide p"><b id="testT"></b><button id="testX" data-i="testStop">إنهاء</button></div>
   <div id="chatlog" class="sa-l"></div>
   <div id="chatbox" class="hide p"><input id="chatIn" maxlength="140" data-ph="chatPh" placeholder="اكتب رسالة…"><button id="chatSend" data-i="send">إرسال</button></div>
   <div id="toast"></div>
   <button id="action" class="hide p"></button>
   <canvas id="speedo" class="hide sa-b" width="340" height="240"></canvas>
+  <div id="carStat" class="hide">
+    <div class="bar"><svg viewBox="0 0 24 24"><path fill="#ffb020" d="M5 3h9v8h1a2 2 0 0 1 2 2v4a1 1 0 0 0 2 0V9l-2-2 1.5-1.5L21 8v9a3 3 0 0 1-6 0v-4h-1v8H5z"/></svg><div class="tr"><div class="fl" id="fuelF"></div></div></div>
+    <div class="bar"><svg viewBox="0 0 24 24"><path fill="#9fd36a" d="M14.7 6.3a4 4 0 0 0-5.4 5L3 17.6 6.4 21l6.3-6.3a4 4 0 0 0 5-5.4L15 12l-3-3z"/></svg><div class="tr"><div class="fl" id="chpF"></div></div></div>
+  </div>
   <div id="joy" class="p sa-b sa-l"><div id="knob"></div></div>
   <div id="footBtns" class="rb sa-b sa-r p">
     <button class="cb" id="bSprint" aria-label="sprint"><svg viewBox="0 0 24 24"><circle cx="14" cy="4.5" r="2"/><path d="M8 21l3-6 3 2v5M6 12l3-4 4 1 3 4 3 1M11 15l-1-4"/></svg></button>
     <button class="cb big" id="bJump" aria-label="jump"><svg viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button>
   </div>
   <div id="carBtns" class="rb sa-b sa-r p hide">
-    <button class="cb" id="bExit" aria-label="exit" style="align-self:flex-start;width:58px;height:58px"><svg viewBox="0 0 24 24"><path d="M14 4h5v16h-5M10 8l-4 4 4 4M6 12h10"/></svg></button>
+    <div style="display:flex;flex-direction:column;gap:10px;align-self:flex-start">
+      <button class="cb" id="bHorn" aria-label="horn" style="width:58px;height:58px"><svg viewBox="0 0 24 24"><path d="M4 10v4h3l5 4V6L7 10zM16 9a4 4 0 0 1 0 6M18.5 6.5a7.5 7.5 0 0 1 0 11"/></svg></button>
+      <button class="cb" id="bExit" aria-label="exit" style="width:58px;height:58px"><svg viewBox="0 0 24 24"><path d="M14 4h5v16h-5M10 8l-4 4 4 4M6 12h10"/></svg></button>
+    </div>
     <button class="cb" id="brake"><b data-i="brake">فرامل</b></button>
     <button class="cb" id="gas"><b data-i="gas">بنزين</b></button>
   </div>
 </div>
 
-<div id="shop" class="modal hide">
-  <div class="sheet">
-    <h2><span data-i="showroom">معرض السيارات</span><button class="x" data-close data-i="close">إغلاق</button></h2>
-    <div class="cars" id="carList"></div>
-    <div class="sw"><span data-i="color">اللون:</span><span id="swatches" class="sw" style="margin:0"></span></div>
+<div id="shop" class="modal shop hide">
+  <div class="shTop sa-t"><span data-i="showroom">معرض السيارات</span><button class="x" data-close data-i="close">إغلاق</button></div>
+  <div class="shInfo">
+    <b id="shName"></b><small id="shSub"></small>
+    <div class="pr" id="shPrice"></div>
+    <div class="spec"><span data-i="speed">السرعة</span><div class="tr"><div class="fl" id="shSpeed"></div></div><em id="shSpeedV"></em></div>
+    <div class="spec"><span data-i="accel">التسارع</span><div class="tr"><div class="fl" id="shAcc"></div></div><em></em></div>
+    <div id="swatches" class="sw"></div>
+    <div class="shBtns"><button id="shBuy" class="play"></button><button id="shTest" data-i="test">تجربة القيادة</button></div>
+  </div>
+  <div class="cars sa-b" id="carList"></div>
+</div>
+<div id="wardrobe" class="modal shop hide">
+  <div class="shTop sa-t"><span data-i="clothesShop">محل الملابس</span><button class="x" data-close data-i="close">إغلاق</button></div>
+  <div class="shInfo">
+    <b id="wdName"></b>
+    <div class="pr" id="wdPrice"></div>
+    <div class="chips" id="wdHeads"></div>
+    <div id="wdColors" class="sw"></div>
+    <div class="chips"><button id="wdBeard" class="chip"></button><button id="wdGlasses" class="chip"></button></div>
+    <div class="shBtns"><button id="wdBtn" class="play"></button></div>
+  </div>
+  <div class="cars sa-b" id="wdList"></div>
+</div>
+<div id="store" class="modal hide">
+  <div class="sheet small">
+    <h2><span id="storeT"></span><button class="x" data-close data-i="close">إغلاق</button></h2>
+    <div id="storeList"></div>
+  </div>
+</div>
+<div id="invM" class="modal hide">
+  <div class="sheet small">
+    <h2><span data-i="inv">الحقيبة</span><button class="x" data-close data-i="close">إغلاق</button></h2>
+    <div id="invList"></div>
   </div>
 </div>
 <div id="map" class="modal hide">
@@ -200,6 +282,7 @@ input{font:inherit}
   <div class="sheet">
     <h2><span data-i="settings">الإعدادات</span><button class="x" data-close data-i="close">إغلاق</button></h2>
     <div class="set"><span data-i="gfx">الرسومات</span><div class="seg" id="gfxSeg"><button data-q="low" data-i="low">منخفضة</button><button data-q="high" data-i="high">عالية</button></div></div>
+    <div class="set"><span data-i="sound">الصوت</span><div class="seg"><button data-snd="1" data-i="on">تشغيل</button><button data-snd="0" data-i="off">إيقاف</button></div></div>
     <div class="set"><span data-i="language">اللغة</span><div class="seg langs"><button data-lang="ar">العربية</button><button data-lang="ru">Русский</button></div></div>
     <div class="keys" data-i="keys">WASD · Shift · Space · F · E · M · T · C</div>
   </div>

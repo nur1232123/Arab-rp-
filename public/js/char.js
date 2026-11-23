@@ -20,9 +20,9 @@ function shemagh() {
 function seg(parent, geo, material, x, y, z) { const m = new THREE.Mesh(geo, material); m.position.set(x, y, z); m.castShadow = true; parent.add(m); return m; }
 function joint(parent, x, y, z) { const g = new THREE.Group(); g.position.set(x, y, z); parent.add(g); return g; }
 
-export function makeChar({ outfit = 'thobe_red', skin = '#c99a6e', shirt = '#2c5d8f' } = {}) {
-  const thobe = outfit.startsWith('thobe');
-  const skinM = mat(skin), cloth = mat(thobe ? '#f5f5f1' : shirt), pants = mat(thobe ? '#f5f5f1' : '#2d3d5c');
+export function makeChar({ outfit = 'thobe', head: hw = 'shemagh', skin = '#c99a6e', cloth: clothCol = '#f5f5f1' } = {}) {
+  const thobe = outfit === 'thobe' || outfit === 'bisht';
+  const skinM = mat(skin), cloth = mat(clothCol), pants = mat(thobe ? clothCol : '#2d3d5c');
   const shoe = mat(thobe ? '#5a3d24' : '#ececec'), hair = mat('#1b1612');
   const root = new THREE.Group();
   const hips = joint(root, 0, 0.95, 0);
@@ -33,8 +33,8 @@ export function makeChar({ outfit = 'thobe_red', skin = '#c99a6e', shirt = '#2c5
   seg(head, box(0.22, 0.26, 0.24), skinM, 0, 0.13, 0);
   seg(head, box(0.05, 0.03, 0.02), mat('#1a1a1a'), -0.05, 0.16, 0.121); seg(head, box(0.05, 0.03, 0.02), mat('#1a1a1a'), 0.05, 0.16, 0.121);
   seg(head, box(0.2, 0.09, 0.05), hair, 0, 0.03, 0.1); // борода
-  if (thobe) {
-    const sm = outfit === 'thobe_red' ? new THREE.MeshLambertMaterial({ map: shemagh() }) : mat('#fbfbf8');
+  if (hw === 'shemagh' || hw === 'ghutra' || hw === 'black') {
+    const sm = hw === 'shemagh' ? new THREE.MeshLambertMaterial({ map: shemagh() }) : mat(hw === 'black' ? '#55555a' : '#fbfbf8');
     seg(head, box(0.27, 0.12, 0.29), sm, 0, 0.29, -0.005);
     seg(head, box(0.3, 0.42, 0.07), sm, 0, 0.08, -0.15);
     seg(head, box(0.04, 0.34, 0.2), sm, -0.135, 0.11, -0.03); seg(head, box(0.04, 0.34, 0.2), sm, 0.135, 0.11, -0.03);
