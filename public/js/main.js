@@ -5,7 +5,7 @@ import {
   CAR_TIER, SHOWROOMS, GAS_SPOTS, KIOSKS, FUEL_PRICE, REPAIR_PRICE, TUNE_PRICES, ITEMS, SHOP_ITEMS, KIOSK_ITEMS, tuned, STREETS, ROAD_GRID, DAY_MS, FOOD_PRICE, TP_PRICE, LOAD_PAY,
   height, groundY, cityMask, nearestCity, coastE, coastW, cityPoints, FOOD_SPOTS, blockAt,
 } from '../shared/world.js';
-import { buildWorld, makeTargetBeam, textSprite, U } from './build.js';
+import { buildWorld, makeTargetBeam, textSprite, U, loadWorldTextures } from './build.js';
 import { makeCar, animateCar, setCarNight, loadCarModels } from './cars.js';
 import { initSound, setSoundOn, updateSound, sfx } from './sound.js';
 import { findRoute, distToRoute } from './route.js';
@@ -136,7 +136,7 @@ $('play').onclick = () => {
   // полноэкранный режим просим, но игру не ждём: на некоторых браузерах ответ не приходит
   try { document.documentElement.requestFullscreen?.().then(() => screen.orientation?.lock?.('landscape')).catch(() => {}); } catch {}
   $('login').classList.add('hide'); $('loading').classList.remove('hide'); $('loading').textContent = t('loading');
-  setTimeout(() => { init(); connect(); }, 50);
+  setTimeout(async () => { await init(); connect(); }, 50);
 };
 $('name').addEventListener('keydown', e => { if (e.key === 'Enter') $('play').click(); });
 applyLang();
@@ -155,10 +155,13 @@ function applyQuality() {
 const markSound = () => document.querySelectorAll('[data-snd]').forEach(b => b.classList.toggle('on', (b.dataset.snd === '1') === soundOn));
 document.querySelectorAll('[data-snd]').forEach(b => b.onclick = () => { soundOn = b.dataset.snd === '1'; store.set('snd', soundOn ? '1' : '0'); setSoundOn(soundOn); markSound(); });
 markSound();
-function init() {
+async function init() {
   if (started) return; started = true;
   renderer = new THREE.WebGLRenderer({ canvas: $('gl'), antialias: !mobile, powerPreference: 'high-performance' });
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  // киношная цветокоррекция: насыщеннее цвета, мягче пересветы
+  renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.15;
+  await loadWorldTextures(); // фото-текстуры стен, дорог и песка — до постройки города
   scene = new THREE.Scene();
   scene.fog = new THREE.Fog('#efdcb6', 300, 2600);
   scene.background = scene.fog.color;
@@ -973,7 +976,7 @@ function drawSpeedo(v) {
 }
 
 // ---------- день и ночь ----------
-const SKY = { dayT: new THREE.Color('#3f86d0'), dayH: new THREE.Color('#eedcbc'), duskT: new THREE.Color('#34477e'), duskH: new THREE.Color('#f2a15b'), nightT: new THREE.Color('#040814'), nightH: new THREE.Color('#151d33') };
+const SKY = { dayT: new THREE.Color('#2f78cf'), dayH: new THREE.Color('#cfe0ea'), duskT: new THREE.Color('#34477e'), duskH: new THREE.Color('#f2a15b'), nightT: new THREE.Color('#040814'), nightH: new THREE.Color('#151d33') };
 const _top = new THREE.Color(), _hor = new THREE.Color(), sunDir = new THREE.Vector3();
 let lastTod = -1;
 function updateSky(tx, tz) {
@@ -1103,7 +1106,7 @@ function loop(now) {
     if (label) { if (act.textContent !== label) act.textContent = label; act.classList.remove('hide'); } else act.classList.add('hide');
   }
   // маркеры видно только вблизи (дальние показывает радар) — так меньше нагрузка на телефон
-  { const mr = quality === 'high' ? 260 : 90; for (const mk of world.markers) { const v = Math.abs(mk.x - camera.position.x) < mr && Math.abs(mk.z - camera.position.z) < mr; mk.obj.visible = v; if (v) mk.obj.children[0].rotation.y += dt; } }
+  { const mr = quality === 'high' ? 260 : 90; for (const mk of world.markers) { const v = Math.abs(mk.x - camera.position.x) < mr && Math.abs(mk.z - camera.position.z) < mr; mk.obj.visible = v; if (v) { const sp = mk.obj.children[0]; sp.rotation.y += dt * 1.6; sp.position.y = Math.sin(now / 420 + mk.x) * 0.12; } } }
   if (frame % 5 === 0) { const sb = $('stamBar'); sb.classList.toggle('hide', me.stam > 99 || inCar); $('stamF').style.width = me.stam + '%'; $('stamF').classList.toggle('tired', me.tired); }
   const tg = routeTarget();
   if (tg) {

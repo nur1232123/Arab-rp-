@@ -1,0 +1,14 @@
+Textures in this folder come from Poly Haven (https://polyhaven.com) and are licensed CC0 1.0
+(public domain). Downscaled to 512x512 and converted to WebP for Arab RP.
+
+wall_plaster.webp      <- beige_wall_001
+wall_clay.webp         <- clay_plaster
+wall_coral.webp        <- coral_stone_wall
+wall_concrete.webp     <- concrete_wall_003
+wall_old.webp          <- blue_plaster_weathered
+metal_corrugated.webp  <- corrugated_iron_02
+metal_container.webp   <- container_side
+ground_pavers.webp     <- concrete_pavers
+ground_sand.webp       <- aerial_sand
+ground_beach.webp      <- coast_sand_01
+ground_asphalt.webp    <- asphalt_02
