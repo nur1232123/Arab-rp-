@@ -42,10 +42,14 @@ function makeModelCar(type, color) {
   g.add(root);
   const sh = new THREE.Mesh(shadowGeo, M.shadow); sh.scale.set(M0.W + 0.4, 1, M0.len + 0.5); sh.position.y = 0.04; g.add(sh);
   const wheels = [];
+  root.updateMatrixWorld(true);
   for (const q of ['FL', 'FR', 'RL', 'RR']) {
     const w = root.getObjectByName('wheel_' + q); if (!w) continue;
-    const pivot = new THREE.Group(); pivot.position.copy(w.position); w.parent.add(pivot);
-    w.position.set(0, 0, 0); pivot.add(w); pivot.userData.front = q[0] === 'F'; wheels.push(pivot);
+    // ось вращения — центр габаритов колеса (сжатая модель может сдвигать начало узла)
+    const c = new THREE.Box3().setFromObject(w).getCenter(new THREE.Vector3());
+    const par = w.parent, local = par.worldToLocal(c.clone());
+    const pivot = new THREE.Group(); pivot.position.copy(local); par.add(pivot);
+    w.position.sub(local); pivot.add(w); pivot.userData.front = q[0] === 'F'; wheels.push(pivot);
   }
   const hb = new THREE.Mesh(new THREE.PlaneGeometry(5, 11).rotateX(-Math.PI / 2), headBeam()); hb.position.set(0, 0.08, M0.len / 2 + 5.3); hb.rotation.y = Math.PI; g.add(hb);
   g.userData = { wheels, wr: M0.wr, paint, light, tail, type, len: M0.len, W: M0.W, model: true };

@@ -30,16 +30,22 @@ export const HIGHWAY_LINKS = [
   ['riyadh', 'dubai'], ['riyadh', 'doha'], ['doha', 'dubai'],
 ];
 
+// модели car_*.glb — бесплатные модели с 3D Warehouse (см. public/models/LICENSE-3dwarehouse.txt), марки в игре заменены
 export const CARS = {
-  ghazal: { ar: 'غزال', ru: 'Газаль (седан)',     price: 0,     max: 44, accel: 9,  steer: 0.55 },
-  dhib:   { ar: 'ذيب',  ru: 'Зиб (пикап)',        price: 6000,  max: 46, accel: 10, steer: 0.5  },
-  saqr:   { ar: 'صقر',  ru: 'Сакр (внедорожник)', price: 18000, max: 54, accel: 11, steer: 0.48 },
-  barq:   { ar: 'برق',  ru: 'Барк (спорткар)',    price: 45000, max: 72, accel: 16, steer: 0.5  },
-  sahm:   { ar: 'سهم',  ru: 'Сахм (спорт-седан)', price: 30000, max: 70, accel: 14, steer: 0.5,  model: 'bmw' },
-  asifa:  { ar: 'عاصفة', ru: 'Асифа (суперкар)',  price: 120000, max: 92, accel: 21, steer: 0.48, model: 'pagani' },
+  ghazal: { ar: 'غزال',  ru: 'Газаль (седан)',         price: 0,      max: 44, accel: 9,  steer: 0.55, model: 'car_prius' },
+  ujra:   { ar: 'أجرة',  ru: 'Уджра (такси)',          price: 4000,   max: 40, accel: 8,  steer: 0.55, model: 'car_mobilio' },
+  dhib:   { ar: 'ذيب',   ru: 'Зиб (пикап)',            price: 6000,   max: 46, accel: 10, steer: 0.5 }, // пока простая модель: у скачанного пикапа нет обшивки дверей
+  rimal:  { ar: 'رمال',  ru: 'Римал (бизнес-седан)',   price: 12000,  max: 54, accel: 12, steer: 0.52, model: 'car_azera' },
+  jabal:  { ar: 'جبل',   ru: 'Джабаль (внедорожник)',  price: 14000,  max: 48, accel: 10, steer: 0.48, model: 'car_shogun' },
+  saqr:   { ar: 'صقر',   ru: 'Сакр (внедорожник)',     price: 18000,  max: 52, accel: 11, steer: 0.48, model: 'car_4runner' },
+  sahm:   { ar: 'سهم',   ru: 'Сахм (спорт-седан)',     price: 30000,  max: 70, accel: 14, steer: 0.5,  model: 'bmw' },
+  barq:   { ar: 'برق',   ru: 'Барк (спорт-седан)',     price: 45000,  max: 78, accel: 17, steer: 0.5,  model: 'car_e63' },
+  amir:   { ar: 'أمير',  ru: 'Амир (люкс-седан)',      price: 55000,  max: 70, accel: 14, steer: 0.48, model: 'car_ls500' },
+  sultan: { ar: 'سلطان', ru: 'Султан (большой джип)',  price: 65000,  max: 62, accel: 12, steer: 0.45, model: 'car_qx80' },
+  asifa:  { ar: 'عاصفة', ru: 'Асифа (суперкар)',       price: 120000, max: 92, accel: 21, steer: 0.48, model: 'pagani' },
 };
 // автосалоны трёх классов: в каждом городе свой салон эконом, средний и элитный
-export const CAR_TIER = { ghazal: 0, dhib: 0, saqr: 1, sahm: 1, barq: 2, asifa: 2 };
+export const CAR_TIER = { ghazal: 0, ujra: 0, dhib: 0, rimal: 1, jabal: 1, saqr: 1, sahm: 1, barq: 2, amir: 2, sultan: 2, asifa: 2 };
 export const SHOWROOMS = ['showroomLow', 'showroom', 'showroomHigh']; // точки города: эконом, средний, элитный
 export const COLORS = ['#f4f4f2', '#16171a', '#b9bec4', '#c9a54a', '#9b1c1c', '#1f4e8c', '#2f5d3a', '#7a5a3a'];
 export const SKINS = ['#e9c39b', '#c99a6e', '#a87449', '#7a4e2d'];

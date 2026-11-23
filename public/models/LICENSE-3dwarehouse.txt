@@ -1,0 +1,13 @@
+Car models car_*.glb are free models from Trimble 3D Warehouse (https://3dwarehouse.sketchup.com),
+used under the 3D Warehouse General Model License. They were simplified (interior removed,
+reduced to ~25-30k triangles), recentred and compressed for Arab RP. Real brand names are not
+used in the game; each car has its own in-game name.
+
+car_prius.glb    <- "2017 Toyota Prius" by Ghøst           https://3dwarehouse.sketchup.com/model/302300a4-4b27-4eae-8e13-71b10d828cdc
+car_mobilio.glb  <- "2015 Honda Mobilio S Taxi Blue Bird" by Raysh Motor Garage  https://3dwarehouse.sketchup.com/model/15efdee3-90ac-4cd7-aff4-5640fabbab86
+car_4runner.glb  <- "2015 Toyota 4Runner" by Ghøst         https://3dwarehouse.sketchup.com/model/e5df550c-2fab-4206-a7a2-fd901b82f6ae
+car_shogun.glb   <- "Mitsubishi Shogun/Montero" by Shino Raju  https://3dwarehouse.sketchup.com/model/4862a5f9-8469-4cdd-8ba6-27f6bde730d2
+car_azera.glb    <- "2018 Hyundai Azera" by Ghøst          https://3dwarehouse.sketchup.com/model/b8f0ce98-c537-4d3a-a978-800476108308
+car_qx80.glb     <- "2021 Infiniti QX80" by Ghøst          https://3dwarehouse.sketchup.com/model/f949dcde-ffa9-4434-b565-7f2b933db243
+car_ls500.glb    <- "2018 Lexus LS500" by Ghøst            https://3dwarehouse.sketchup.com/model/5709ee75-9fa2-4809-b31d-aab536ec6124
+car_e63.glb      <- "2021 Mercedes-AMG E63S" by Ghøst      https://3dwarehouse.sketchup.com/model/4ae0bb68-7ada-4d61-9ec7-6649add37a1b
