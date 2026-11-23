@@ -184,8 +184,10 @@ async function init() {
     if (customer.char) placeCustomer();
   }).catch(() => {});
   loadCarModels().then(() => { // когда 3D-модели загрузились — заменяем временные машины
-    if (car.mesh && me.profile && car.mesh.userData.type !== carType()) { scene.remove(car.mesh); car.mesh = makeCar(carType(), carColor()); scene.add(car.mesh); }
-    for (const o of others.values()) if (o.car && o.car.userData.type !== o.look.car) rebuildOtherCar(o);
+    // пока модели грузились, стояли временные машины — меняем их на настоящие (даже если тип совпадает)
+    const stale = (mesh, type) => mesh && (mesh.userData.type !== type || (CARS[type]?.model && !mesh.userData.model));
+    if (me.profile && stale(car.mesh, carType())) { scene.remove(car.mesh); car.mesh = makeCar(carType(), carColor()); scene.add(car.mesh); }
+    for (const o of others.values()) if (stale(o.car, o.look.car)) rebuildOtherCar(o);
   });
   drawMapCanvas();
   applyQuality();

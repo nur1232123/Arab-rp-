@@ -1,7 +1,8 @@
 // 3D-автосалон: отдельная маленькая сцена с подиумом. Пока окно салона открыто,
 // главный цикл рисует её вместо города (город всё равно закрыт окном).
 import * as THREE from 'three';
-import { makeCar, animateCar } from './cars.js';
+import { makeCar, animateCar, modelReady } from './cars.js';
+import { CARS } from '../shared/world.js';
 
 export function makeShowroom(envTex) {
   const scene = new THREE.Scene();
@@ -28,8 +29,9 @@ export function makeShowroom(envTex) {
 
   function setCar(t, c) {
     if (person) { scene.remove(person); person = null; }
-    if (t === type && c === color && car) return;
-    if (car && t === type) { car.userData.paint.color.set(c); color = c; return; }
+    const fresh = car && (car.userData.model || !modelReady(t) || !CARS[t]?.model); // не временная ли это машина, пока грузится модель
+    if (t === type && c === color && fresh) return;
+    if (car && t === type && fresh) { car.userData.paint.color.set(c); color = c; return; }
     if (car) scene.remove(car);
     type = t; color = c;
     car = makeCar(t, c);
