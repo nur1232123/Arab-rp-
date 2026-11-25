@@ -10,7 +10,7 @@
 <link rel="icon" href="/icon.svg">
 <title>Arab RP — عرب رول بلاي</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@500;700;900&family=Rubik:wght@500;700;900&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Pirata+One&family=Cairo:wght@500;700;900&family=Rubik:wght@500;700;900&display=swap" rel="stylesheet">
 <style>
 :root{--gold:#f0b429;--gold2:#ffd36a;--ink:#fff;--panel:rgba(10,10,12,.55);--line:rgba(255,255,255,.16);--hp:#e5383b;--food:#f48c06;--money:#8ff0a4}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
@@ -58,15 +58,34 @@ input{font:inherit}
 #radarBox{position:absolute;width:140px}
 #mini{width:140px;height:140px;border-radius:50%;border:3px solid rgba(255,255,255,.9);box-shadow:0 0 0 3px rgba(0,0,0,.45),0 6px 18px rgba(0,0,0,.5);background:#000;display:block}
 #cityName{margin-top:6px;text-align:center;font-weight:900;font-size:15px;text-shadow:0 2px 3px #000,0 0 8px #000}
-#stats{position:absolute;text-align:right;display:flex;flex-direction:column;align-items:flex-end;gap:4px;min-width:180px}
-#clock{font-family:Rubik,sans-serif;font-weight:700;font-size:15px;opacity:.95;text-shadow:0 2px 3px #000;display:flex;gap:10px}
-#money{font-family:Rubik,sans-serif;font-weight:900;font-size:30px;color:var(--money);letter-spacing:.01em;text-shadow:0 2px 0 #062a10,0 0 10px rgba(0,0,0,.7);line-height:1}
+/* худ в духе GTA SA: толстая чёрная обводка, деньги зелёные с нулями, полоски в чёрной рамке */
+.gta{font-family:Anton,Rubik,sans-serif;font-weight:400;letter-spacing:.04em;line-height:1;
+  text-shadow:-2px -2px 0 #000,2px -2px 0 #000,-2px 2px 0 #000,2px 2px 0 #000,0 2px 0 #000,0 -2px 0 #000,2px 0 0 #000,-2px 0 0 #000}
+#stats{position:absolute;text-align:right;display:flex;flex-direction:column;align-items:flex-end;gap:3px}
+#saTop{display:flex;gap:10px;align-items:flex-start}
+#saCol{display:flex;flex-direction:column;align-items:flex-end;gap:4px}
+#wIcon{position:relative;width:70px;height:70px;border-radius:50%;background:radial-gradient(circle at 38% 32%,#8a8a8a,#3a3a3a 55%,#1b1b1b);border:3px solid #000;box-shadow:0 0 0 2px rgba(255,255,255,.35),0 4px 10px rgba(0,0,0,.5);display:grid;place-items:center;padding:0}
+#wIcon i{display:block;width:50px;height:50px}#wIcon svg{width:100%;height:100%}
+#wAmmo{position:absolute;left:50%;bottom:-10px;transform:translateX(-50%);font-size:15px;color:#b9cde6;white-space:nowrap}
+#clock{font-size:27px;color:#e4e4e4}
+.sabar{width:148px;height:13px;border:2px solid #000;background:#4a0b0d;box-shadow:0 1px 3px rgba(0,0,0,.6)}
+.sabar i{display:block;height:100%;width:100%;background:#b8191d;transition:width .3s}
+.sabar.food{background:#4d3206}.sabar.food i{background:#e08b12}
+.sabar.stam{background:#183550}.sabar.stam i{background:#6db2e8;transition:none}
+#stamF.tired{background:#8a9aa8}
+#money{font-size:33px;color:#3f8f35;margin-top:4px}
+#online{font-size:14px;color:#ddd;opacity:.85}
+#zone,#vname{position:absolute;right:max(110px,calc(env(safe-area-inset-right) + 110px));bottom:calc(max(12px,env(safe-area-inset-bottom)) + 96px);opacity:0;transition:opacity .8s;pointer-events:none;white-space:nowrap;text-align:right}
+#zone{font-family:'Pirata One',Anton,serif;font-size:40px;color:#eef0f2;letter-spacing:.02em}
+#vname{bottom:calc(max(12px,env(safe-area-inset-bottom)) + 140px);font-size:26px;color:#6fbf4a}
+#zone.on,#vname.on{opacity:1;transition:opacity .25s}
+#cityName{display:none}
+#hud .menu .ib{width:36px;height:36px;border-radius:50%;background:rgba(0,0,0,.45);border:2px solid rgba(0,0,0,.7)}
+#hud .menu .ib svg{width:18px;height:18px}
 .bar{display:flex;align-items:center;gap:6px}
 .bar svg{width:16px;height:16px}
 .bar .tr{width:150px;height:9px;border-radius:6px;background:rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.25);overflow:hidden}
 .bar .fl{height:100%;width:100%;transition:width .3s}
-#hpF{background:linear-gradient(90deg,#9d0208,var(--hp))}#foodF{background:linear-gradient(90deg,#c35a00,var(--food))}
-#stamF{background:linear-gradient(90deg,#1c6fb8,#4fb3ff);transition:none}#stamF.tired{background:#8a9aa8}
 .menu{display:flex;gap:6px;margin-top:6px}
 .ib{width:42px;height:42px;border-radius:12px;background:var(--panel);border:1px solid var(--line);display:grid;place-items:center}
 .ib svg{width:21px;height:21px;fill:none;stroke:#fff;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
@@ -157,12 +176,14 @@ input{font:inherit}
 .chip.on{background:var(--gold);color:#2a1700;border-color:var(--gold)}
 .chip small{opacity:.75;font-size:11px;margin-inline-start:3px}
 /* ---------- бой, семья, захваты ---------- */
-#bWpn{display:flex;flex-direction:column;gap:0;line-height:1.05}
-#bWpn b{font-size:11.5px}#bWpn small{font-family:Rubik,sans-serif;font-size:12px;color:var(--gold2);min-height:1em}
-#bFire{background:rgba(200,40,40,.5)}
+#bFire{background:radial-gradient(circle at 38% 32%,rgba(140,140,140,.75),rgba(30,30,30,.75));border:3px solid rgba(0,0,0,.8);box-shadow:0 0 0 2px rgba(255,255,255,.3)}
+#bFire svg{width:62%;height:62%}
+#bFire.on{background:radial-gradient(circle at 38% 32%,rgba(200,200,200,.85),rgba(60,60,60,.85))}
 #xhair{position:absolute;left:50%;top:45%;width:22px;height:22px;margin:-11px 0 0 -11px;pointer-events:none;
   background:linear-gradient(#fff,#fff) center/2px 8px no-repeat,linear-gradient(#fff,#fff) center/8px 2px no-repeat;opacity:.8;filter:drop-shadow(0 0 2px #000)}
-#lock{position:absolute;left:0;top:0;width:36px;height:36px;border:2px solid #ff4d4d;border-radius:50%;pointer-events:none;box-shadow:0 0 6px #ff4d4d}
+#lock{position:absolute;left:0;top:0;width:48px;height:48px;pointer-events:none;color:#3f3}
+#lock svg{width:100%;height:100%;animation:lockspin 2.4s linear infinite;filter:drop-shadow(0 0 3px rgba(0,0,0,.8))}
+@keyframes lockspin{to{transform:rotate(360deg)}}
 #feed{position:absolute;top:calc(max(10px,env(safe-area-inset-top)) + 150px);display:flex;flex-direction:column;gap:3px;align-items:flex-end;font-size:13px;pointer-events:none}
 #feed div{background:rgba(0,0,0,.55);border-radius:8px;padding:2px 9px;unicode-bidi:plaintext}
 #hurtFx{position:fixed;inset:0;pointer-events:none;opacity:0;transition:opacity .35s;box-shadow:inset 0 0 120px 30px rgba(200,0,0,.75)}
@@ -181,7 +202,7 @@ input{font:inherit}
 /* телефон горизонтально: вход должен влезать целиком вместе с кнопкой */
 @media (max-height:440px){#login{padding:8px 16px;align-items:start}.logo{font-size:30px}.sub{display:none}.reg{gap:6px;padding:10px}.reg label{font-size:12px}.reg input{height:38px;margin-top:2px}.opt{padding:4px;font-size:12.5px}.opt i{display:none}.skins button{width:30px;height:30px}.langs button{padding:4px 12px}.play{height:44px;font-size:18px}
   .shInfo{top:58px;gap:3px}.shTop{font-size:18px}.shInfo b{font-size:24px}.shInfo .pr{font-size:21px}.shBtns .play,#shTest{height:40px}.shInfo .sw button{width:26px;height:26px}}
-@media (max-height:440px){#mini,#radarBox{width:112px}#mini{height:112px}#chatlog{top:160px}#joy{width:132px;height:132px}.cb{width:64px;height:64px}.cb.big{width:76px;height:76px}#gas{height:108px;width:82px}#brake{width:72px;height:72px}#money{font-size:25px}.bar .tr{width:120px}#action{bottom:170px}#speedo{width:150px;height:106px}}
+@media (max-height:440px){#mini,#radarBox{width:112px}#mini{height:112px}#chatlog{top:160px}#joy{width:132px;height:132px}.cb{width:64px;height:64px}.cb.big{width:76px;height:76px}#gas{height:108px;width:82px}#brake{width:72px;height:72px}#money{font-size:27px}.sabar{width:120px;height:11px}#clock{font-size:22px}#wIcon{width:58px;height:58px}#wIcon i{width:42px;height:42px}#zone{font-size:32px}#action{bottom:170px}#speedo{width:150px;height:106px}}
 </style>
 </head>
 <body>
@@ -213,11 +234,18 @@ input{font:inherit}
 <div id="hud" class="hide">
   <div id="radarBox" class="sa-t sa-l"><canvas id="mini" width="280" height="280"></canvas><div id="cityName"></div></div>
   <div id="stats" class="sa-t sa-r">
-    <div id="clock"><span id="online"></span><span id="time">12:00</span></div>
-    <div id="money">$0</div>
-    <div class="bar"><div class="tr"><div class="fl" id="hpF"></div></div><svg viewBox="0 0 24 24"><path fill="#e5383b" d="M12 21s-8-5.2-8-11a4.5 4.5 0 0 1 8-2.8A4.5 4.5 0 0 1 20 10c0 5.8-8 11-8 11z"/></svg></div>
-    <div class="bar"><div class="tr"><div class="fl" id="foodF"></div></div><svg viewBox="0 0 24 24"><path fill="#f48c06" d="M4 11h16a8 8 0 0 1-16 0zm2-2c0-3 3-5 6-5s6 2 6 5z"/></svg></div>
-    <div class="bar hide" id="stamBar"><div class="tr"><div class="fl" id="stamF"></div></div><svg viewBox="0 0 24 24"><path fill="#4fb3ff" d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg></div>
+    <!-- как в GTA SA: значок оружия с патронами, справа часы и полоски, ниже деньги -->
+    <div id="saTop">
+      <button id="wIcon" class="p" aria-label="weapon"><i></i><span id="wAmmo" class="gta"></span></button>
+      <div id="saCol">
+        <div id="clock" class="gta"><span id="time">12:00</span></div>
+        <div class="sabar"><i id="hpF"></i></div>
+        <div class="sabar food"><i id="foodF"></i></div>
+        <div class="sabar stam hide" id="stamBar"><i id="stamF"></i></div>
+      </div>
+    </div>
+    <div id="money" class="gta">$00000000</div>
+    <div id="online" class="gta"></div>
     <div class="menu p">
       <button class="ib" id="bMap" aria-label="map"><svg viewBox="0 0 24 24"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/></svg></button>
       <button class="ib" id="bInv" aria-label="bag"><svg viewBox="0 0 24 24"><path d="M5 8h14l-1 12H6zM9 8V6a3 3 0 0 1 6 0v2"/></svg></button>
@@ -242,16 +270,15 @@ input{font:inherit}
   </div>
   <div id="joy" class="p sa-b sa-l"><div id="knob"></div></div>
   <div id="xhair" class="hide"></div>
-  <div id="lock" class="hide"></div>
+  <div id="lock" class="hide"><svg viewBox="0 0 48 48"><g fill="currentColor" stroke="#000" stroke-width="1.5" stroke-linejoin="round"><path d="M24 2l5 9h-10z"/><path d="M46 24l-9 5v-10z"/><path d="M24 46l-5-9h10z"/><path d="M2 24l9-5v10z"/></g><circle cx="24" cy="24" r="12" fill="none" stroke="currentColor" stroke-width="2.5"/></svg></div>
   <div id="feed" class="sa-r"></div>
   <div id="hurtFx"></div>
   <div id="capBar" class="hide"></div>
   <div id="famInv" class="hide p"><span id="famInvT"></span><button id="famAcc" data-i="accept">قبول</button><button id="famDec" data-i="decline">رفض</button></div>
+  <div id="zone" class="gta"></div>
+  <div id="vname" class="gta"></div>
   <div id="footBtns" class="rb sa-b sa-r p">
-    <div style="display:flex;flex-direction:column;gap:10px;align-self:flex-start;align-items:center">
-      <button class="cb" id="bWpn" aria-label="weapon" style="width:58px;height:58px"><b></b><small></small></button>
-    </div>
-    <button class="cb big hide" id="bFire" aria-label="fire"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5"/></svg></button>
+    <button class="cb big hide" id="bFire" aria-label="fire"></button>
     <button class="cb" id="bSprint" aria-label="sprint"><svg viewBox="0 0 24 24"><circle cx="14" cy="4.5" r="2"/><path d="M8 21l3-6 3 2v5M6 12l3-4 4 1 3 4 3 1M11 15l-1-4"/></svg></button>
     <button class="cb big" id="bJump" aria-label="jump"><svg viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button>
   </div>

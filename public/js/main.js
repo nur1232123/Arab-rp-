@@ -19,7 +19,7 @@ import { makeChar, animateChar } from './char.js';
 import { loadHuman, humanReady, makeHuman, animateHuman } from './human.js';
 // настоящий персонаж, а пока он грузится — простой
 const createChar = look => (humanReady() ? makeHuman(look) : makeChar(look));
-const animChar = (ch, speed, air, dt, t, dead = false) => (ch.userData.human ? animateHuman(ch, speed, air, dt, dead) : animateChar(ch, speed, air, dt, t));
+const animChar = (ch, speed, air, dt, t, dead = false, twist = 0, rev = false) => (ch.userData.human ? animateHuman(ch, speed, air, dt, dead, twist, rev) : animateChar(ch, speed, air, dt, t));
 
 const $ = id => document.getElementById(id);
 const store = { get(k) { try { return localStorage.getItem(k); } catch { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch {} } };
@@ -319,7 +319,7 @@ function onMsg(m) {
       me.id = m.id; me.profile = m.profile; store.set('token', m.token);
       me.test = null; me.dead = false; $('test').classList.add('hide'); $('dead').classList.add('hide'); clearJob(); clearLoad();
       timeOff = m.now - Date.now(); srvOff = timeOff;
-      me.w = 'fist'; if (scene) setGunMesh(me, null);
+      me.w = 'fist'; me.clip = {}; me.reloadT = 0; lockT = null; if (scene) setGunMesh(me, null);
       me.hp = m.profile.hp ?? 100; me.hunger = m.profile.hunger ?? 100;
       if (first) { teleport(m.spawn.x, m.spawn.z); }
       buildMe();
@@ -349,8 +349,8 @@ function onMsg(m) {
     case 'wpn': { const o = others.get(m.id); if (o) o.w = m.w; break; }
     case 'shot': onShotMsg(m); break;
     case 'hurt': { sfx.hurt(); const h = $('hurtFx'); h.style.opacity = 0.7; setTimeout(() => { h.style.opacity = 0; }, 180); break; }
-    case 'hitok': sfx.hitmark(); break;
-    case 'kill': killFeed(t('killed', m.killer, m.victim)); break;
+    case 'hitok': { sfx.hitmark(); const o = others.get(m.id); if (o && m.hp !== undefined) o.hp = m.hp; break; }
+    case 'kill': killFeed(t('killed', m.killer, m.victim)); for (const o of others.values()) if (o.name === m.victim) o.hp = 100; break;
     // ----- семьи -----
     case 'tag': { const o = others.get(m.id); if (o) setTag(o, m.fam); break; }
     case 'fam': fam = m.fam; renderFam(); break;
@@ -367,7 +367,7 @@ function onMsg(m) {
     case 'bought': setProfile(m.profile); sfx.coin(); toast(t('bought'), 2500, '#8ff0a4'); break;
     case 'cloth_ok': setProfile(m.profile); sfx.coin(); toast(t('clothOk'), 1800, '#8ff0a4'); break;
     case 'veh': me.fuel = m.fuel; me.chp = m.chp; updateCarStat(); renderStore(); break;
-    case 'paid': setProfile(m.profile); sfx.coin(); toast(t('paid', m.cost), 1400, '#8ff0a4'); renderStore(); updateWeaponHud(); break;
+    case 'paid': setProfile(m.profile); sfx.coin(); toast(t('paid', m.cost), 1400, '#8ff0a4'); renderStore(); fixClip(me.w); updateWeaponHud(); break;
     case 'used': setProfile(m.profile); me.hp = m.profile.hp; me.hunger = m.profile.hunger; sfx.eat(); renderInv(); updateHud(); break;
     case 'vit': {
       if (me.hunger > 15 && m.hunger <= 15) toast(t('hungry'), 2500, '#ffb347');
@@ -464,9 +464,9 @@ $('bHorn').onclick = () => sfx.horn();
 const gl = $('gl'); const drags = new Map();
 gl.addEventListener('pointerdown', e => {
   drags.set(e.pointerId, { x: e.clientX, y: e.clientY }); gl.setPointerCapture(e.pointerId);
-  if (e.pointerType === 'mouse' && e.button === 0 && me.profile && !shopOpen()) fireHeld = true; // на компьютере ЛКМ — огонь (и обзор мышью)
+  if (e.pointerType === 'mouse' && e.button === 0 && me.profile && !shopOpen() && me.mode === 'foot') startFire(); // на компьютере ЛКМ — огонь (и обзор мышью)
 });
-gl.addEventListener('pointerup', e => { if (e.pointerType === 'mouse') fireHeld = false; });
+gl.addEventListener('pointerup', e => { if (e.pointerType === 'mouse') stopFire(); });
 gl.addEventListener('pointermove', e => {
   const d = drags.get(e.pointerId); if (!d) return;
   const k = e.pointerType === 'mouse' ? 0.006 : 0.008;
@@ -506,8 +506,8 @@ $('bSet').onclick = () => toggleModal('settings');
 $('bChat').onclick = () => openChat();
 $('bInv').onclick = () => openInv();
 $('bFam').onclick = () => openFam();
-$('bWpn').onclick = () => cycleWeapon();
-hold('bFire', () => { fireHeld = true; fire(performance.now()); }, () => { fireHeld = false; });
+$('wIcon').onclick = () => cycleWeapon(); // как в GTA SA: тап по значку оружия — следующее
+hold('bFire', () => startFire(), () => stopFire());
 $('famAcc').onclick = () => { net({ t: 'fam_accept' }); $('famInv').classList.add('hide'); };
 $('famDec').onclick = () => { famInvite = null; $('famInv').classList.add('hide'); };
 $('bCar').onclick = () => summonCar();
@@ -538,14 +538,21 @@ function toast(text, ms = 2000, color = '#fff') {
 }
 function updateHud() {
   if (!me.profile) return;
-  $('money').textContent = '$' + me.profile.money.toLocaleString('en-US');
+  $('money').textContent = '$' + String(Math.max(0, Math.floor(me.profile.money))).padStart(8, '0'); // как в GTA SA: $00001500
   $('online').textContent = t('online', online);
   $('hpF').style.width = clamp(me.hp, 0, 100) + '%';
   $('foodF').style.width = clamp(me.hunger, 0, 100) + '%';
 }
 
 // ---------- машина: сесть/выйти/вызвать ----------
+// надпись, которая появляется на пару секунд и тает (район, название машины)
+const nameT = {};
+function flashName(id, text, ms = 3000) {
+  const el = $(id); el.textContent = text; el.classList.add('on');
+  clearTimeout(nameT[id]); nameT[id] = setTimeout(() => el.classList.remove('on'), ms);
+}
 function setMode(m) {
+  if (m === 'car' && me.mode !== 'car' && CARS[me.profile?.car]) flashName('vname', lang === 'ru' ? CARS[me.profile.car].ru : CARS[me.profile.car].ar, 2500);
   me.mode = m;
   $('carStat').classList.toggle('hide', m !== 'car' || !!me.test);
   $('footBtns').classList.toggle('hide', m !== 'foot');
@@ -629,7 +636,7 @@ function carsAround() { // все машины, кроме той, в котор
 // и быстро поворачивается за джойстиком; при развороте на бегу — короткий разворот на месте.
 // Камера сама заходит за спину. Прыжок у невысокого препятствия — перелезть через него.
 const FOOT = { walk: 1.7, jog: 5.2, run: 8.0, acc: 34, dec: 28, jump: 6.4, g: 22 };
-Object.assign(me, { vx: 0, vz: 0, stam: 100, tired: false, coyote: 0, jumpBuf: 0, landSlow: 0, visY: null, lean: 0, roll: 0, vault: null, turnT: 0 });
+Object.assign(me, { aiming: false, aimYaw: 0, moveYaw: 0, vx: 0, vz: 0, stam: 100, tired: false, coyote: 0, jumpBuf: 0, landSlow: 0, visY: null, lean: 0, roll: 0, vault: null, turnT: 0 });
 function updateFoot(dt) {
   if (me.vault) return updateVault(dt);
   const k = input.keys;
@@ -656,20 +663,30 @@ function updateFoot(dt) {
   // поворот: корпус догоняет джойстик быстро; если надо развернуться назад на бегу — разворот на месте
   const prevRy = me.ry;
   me.turnT = Math.max(0, me.turnT - dt);
-  if (mag >= 0.08 && me.onGround) {
+  if (me.aiming) {
+    // целимся (как в GTA SA): без бега, смотрим на цель, джойстик двигает вбок/назад шагом
+    top = mag < 0.08 ? 0 : (mag > 0.6 ? 3.0 : FOOT.walk) * slopeK;
+    me.ry = lerpAng(me.ry, me.aimYaw, Math.min(1, dt * 18));
+    if (mag >= 0.08) me.moveYaw = Math.atan2(mx, mz);
+    if (me.onGround) me.spd += clamp(top - me.spd, -FOOT.dec * dt, FOOT.acc * dt);
+    me.vx = Math.sin(me.moveYaw) * me.spd; me.vz = Math.cos(me.moveYaw) * me.spd;
+    me.lean += (0 - me.lean) * Math.min(1, dt * 8); me.roll += (0 - me.roll) * Math.min(1, dt * 8);
+  } else if (mag >= 0.08 && me.onGround) {
     const want = Math.atan2(mx, mz), diff = Math.atan2(Math.sin(want - me.ry), Math.cos(want - me.ry));
     if (Math.abs(diff) > 2.4 && me.spd > 4 && !me.turnT) { me.turnT = 0.18; me.spd *= 0.35; }
     const rate = me.turnT ? 20 : sprint ? 9 : 15;
     me.ry += clamp(diff, -rate * dt, rate * dt);
     if (Math.abs(diff) > 1.6) top *= 0.4; // сильно не туда — сначала повернись
   }
-  // скорость набирается и гасится быстро, но не мгновенно (лёгкий «доскок» при остановке)
-  if (me.onGround) me.spd += clamp(top - me.spd, -FOOT.dec * dt, FOOT.acc * dt);
-  me.vx = Math.sin(me.ry) * me.spd; me.vz = Math.cos(me.ry) * me.spd; // в воздухе сохраняем разбег
-  // лёгкий наклон в сторону поворота на бегу
-  const turn = Math.atan2(Math.sin(me.ry - prevRy), Math.cos(me.ry - prevRy)) / Math.max(dt, 1e-3);
-  me.lean += (clamp(me.spd * 0.008, 0, 0.07) - me.lean) * Math.min(1, dt * 8);
-  me.roll += (clamp(-turn * me.spd * 0.006, -0.12, 0.12) - me.roll) * Math.min(1, dt * 10);
+  if (!me.aiming) {
+    // скорость набирается и гасится быстро, но не мгновенно (лёгкий «доскок» при остановке)
+    if (me.onGround) me.spd += clamp(top - me.spd, -FOOT.dec * dt, FOOT.acc * dt);
+    me.vx = Math.sin(me.ry) * me.spd; me.vz = Math.cos(me.ry) * me.spd; me.moveYaw = me.ry; // в воздухе сохраняем разбег
+    // лёгкий наклон в сторону поворота на бегу
+    const turn = Math.atan2(Math.sin(me.ry - prevRy), Math.cos(me.ry - prevRy)) / Math.max(dt, 1e-3);
+    me.lean += (clamp(me.spd * 0.008, 0, 0.07) - me.lean) * Math.min(1, dt * 8);
+    me.roll += (clamp(-turn * me.spd * 0.006, -0.12, 0.12) - me.roll) * Math.min(1, dt * 10);
+  }
 
   // прыжок у невысокого препятствия — перелезаем через него
   if (input.jump && me.onGround && !me.load && tryVault()) { input.jump = false; return; }
@@ -872,25 +889,45 @@ function renderInv() {
   $('invList').querySelectorAll('[data-use]').forEach(b => b.onclick = () => net({ t: 'use', item: b.dataset.use }));
 }
 // ---------- бой ----------
-let fx = null, fireHeld = false, lastShot = 0, lockT = null, srvOff = 0;
-Object.assign(me, { w: 'fist', gun: null, aimT: 0, aimDir: new THREE.Vector3(0, 0, 1) });
+// Как в GTA SA: зажал «огонь» — персонаж берёт на прицел ближайшего (метка над целью цвета её здоровья),
+// поворачивается к нему и стреляет, пока держишь; джойстик в это время двигает шагом вбок и назад.
+// У оружия есть обойма: кончилась — перезарядка. Патроны и урон всё равно считает сервер.
+let fx = null, fireHeld = false, lastShot = 0, lockT = null, srvOff = 0, losT = 0;
+const CLIP = { pistol: 17, smg: 30, rifle: 30 }, RELOAD = { pistol: 1.1, smg: 1.4, rifle: 1.6 };
+Object.assign(me, { w: 'fist', gun: null, aimT: 0, aimDir: new THREE.Vector3(0, 0, 1), clip: {}, reloadT: 0 });
 const ownedWeapons = () => ['fist', ...WEAPON_ORDER.filter(w => w !== 'fist' && me.profile?.guns?.[w] !== undefined)];
 function setGunMesh(holder, w) {
   if (holder.gun) { scene.remove(holder.gun); holder.gun = null; }
   if (w && w !== 'fist') { holder.gun = makeGun(w); holder.gun.userData.type = w; scene.add(holder.gun); }
 }
+const totalAmmo = w => me.profile?.guns?.[w] || 0;
+function fixClip(w) { // обойма не больше, чем есть патронов
+  if (!CLIP[w]) return;
+  const tot = totalAmmo(w);
+  me.clip[w] = me.clip[w] === undefined ? Math.min(CLIP[w], tot) : Math.min(me.clip[w], tot);
+  if (me.clip[w] === 0 && tot > 0 && !me.reloadT) me.clip[w] = Math.min(CLIP[w], tot);
+}
 function equip(w) {
   if (!ownedWeapons().includes(w)) w = 'fist';
-  me.w = w; setGunMesh(me, w); net({ t: 'equip', w }); updateWeaponHud();
+  me.w = w; me.reloadT = 0; lockT = null; fixClip(w); setGunMesh(me, w); net({ t: 'equip', w }); updateWeaponHud();
 }
 function cycleWeapon() { const list = ownedWeapons(); equip(list[(list.indexOf(me.w) + 1) % list.length]); }
+// значки оружия (свои простые силуэты)
+const WICON = {
+  fist: '<path d="M17 25c0-3 2-5 5-5h20c4 0 7 3 7 7v9c0 8-6 14-14 14h-6c-7 0-12-5-12-12zM24 20v10M31 20v10M38 20v10M17 33h14"/>',
+  pistol: '<path d="M8 20h44v9H31l-2 4h-5l-3 15H11l4-19H8z"/><path d="M22 33c2 4 6 4 7 0" fill="none"/>',
+  smg: '<path d="M5 22h46v3h7v6H45v4h-7l-2 13h-7l2-13h-6v10h-7V31H15l-5 7H5z"/>',
+  rifle: '<path d="M2 27l13-5h30v-3h17v6H49v5h-6l-3 11h-6l2-11H29l-7 11h-9l5-9H2z"/>',
+};
+const wSvg = w => `<svg viewBox="0 0 64 64"><g fill="#e8e8e8" stroke="#111" stroke-width="2" stroke-linejoin="round" stroke-linecap="round">${WICON[w] || WICON.fist}</g></svg>`;
+let shownW = null;
 function updateWeaponHud() {
-  const W = WEAPONS[me.w], ammo = me.profile?.guns?.[me.w];
-  $('bWpn').querySelector('b').textContent = lang === 'ru' ? W.ru : W.ar;
-  $('bWpn').querySelector('small').textContent = W.melee ? '' : String(ammo ?? 0);
+  const W = WEAPONS[me.w];
+  if (shownW !== me.w) { shownW = me.w; $('wIcon').querySelector('i').innerHTML = wSvg(me.w); $('bFire').innerHTML = wSvg(me.w); }
+  const clip = me.clip[me.w] || 0, tot = totalAmmo(me.w);
+  $('wAmmo').textContent = W.melee ? '' : me.reloadT > 0 ? '...' : `${clip}-${Math.max(0, tot - clip)}`;
   const armed = me.mode === 'foot' && !me.dead;
   $('bFire').classList.toggle('hide', !armed);
-  $('xhair').classList.toggle('hide', !armed || W.melee);
 }
 // стена между двумя точками? (шагаем по лучу и смотрим здания)
 function wallBetween(a, b) {
@@ -902,26 +939,46 @@ function wallBetween(a, b) {
   }
   return false;
 }
+const eyePos = () => new THREE.Vector3(me.x, (me.visY ?? me.y) + 1.45, me.z);
+const targetPos = o => new THREE.Vector3(o.mode ? o.c.cx : o.c.x, (o.mode ? o.car.position.y : o.c.y) + 1.1, o.mode ? o.c.cz : o.c.z);
+// взять на прицел: ближайший перед камерой (или вокруг, если впереди никого)
+function acquireLock() {
+  const W = WEAPONS[me.w], from = eyePos();
+  if (W.melee) return pickTarget(from, new THREE.Vector3(Math.sin(me.ry), 0, Math.cos(me.ry)), others, 2.2, 1.6);
+  const fwd = camera.getWorldDirection(new THREE.Vector3());
+  return pickTarget(from, fwd, others, W.range, mobile ? 0.7 : 0.4, wallBetween) || pickTarget(from, fwd, others, W.range * 0.6, 2.2, wallBetween);
+}
+function startFire() { fireHeld = true; if (!lockT || !others.has(lockT.o.id)) lockT = acquireLock(); losT = 0; fire(performance.now()); }
+function stopFire() { fireHeld = false; }
 function fire(now) {
   if (me.mode !== 'foot' || me.dead || shopOpen()) return;
   const W = WEAPONS[me.w];
-  if (now - lastShot < W.rate * 1000) return;
+  if (now - lastShot < W.rate * 1000 || me.reloadT > 0) return;
+  if (!W.melee) {
+    if (!(totalAmmo(me.w) > 0)) { if (now - lastShot > 600) { toast(t('noAmmo'), 1200, '#ff8a7a'); sfx.error(); lastShot = now; } return; }
+    fixClip(me.w);
+    if (!(me.clip[me.w] > 0)) return startReload();
+  }
   lastShot = now;
-  if (!W.melee && !(me.profile.guns[me.w] > 0)) { toast(t('noAmmo'), 1200, '#ff8a7a'); sfx.error(); fireHeld = false; return; }
-  const from = new THREE.Vector3(me.x, (me.visY ?? me.y) + 1.45, me.z);
+  const from = eyePos();
+  const tg = lockT && !lockT.o.dead && others.has(lockT.o.id) ? { o: lockT.o, p: targetPos(lockT.o), d: targetPos(lockT.o).distanceTo(from) } : null;
   const fwd = camera.getWorldDirection(new THREE.Vector3());
-  // автонаводка: ближайший игрок в конусе перед камерой, без стены между нами
-  const tg = W.melee ? pickTarget(from, new THREE.Vector3(Math.sin(me.ry), 0, Math.cos(me.ry)), others, 2.0, 1.1)
-    : pickTarget(from, fwd, others, W.range, mobile ? 0.55 : 0.32, wallBetween);
-  const dir = tg ? tg.p.clone().sub(from).normalize() : fwd.clone();
+  const dir = tg ? tg.p.clone().sub(from).normalize() : W.melee ? new THREE.Vector3(Math.sin(me.ry), 0, Math.cos(me.ry)) : fwd.clone();
   if (!W.melee) { const s = W.spread * (tg ? 0.6 : 1); dir.x += (Math.random() - 0.5) * s; dir.y += (Math.random() - 0.5) * s; dir.z += (Math.random() - 0.5) * s; dir.normalize(); }
   // промах тем вероятнее, чем дальше цель и хуже оружие
-  const hit = tg && (W.melee || Math.random() > (W.spread * 4 + tg.d / W.range * 0.35)) ? tg.o.id : null;
-  me.ry = Math.atan2(dir.x, dir.z); me.aimDir.copy(dir); me.aimT = 0.9;
+  const inReach = tg && tg.d <= W.range + 0.5;
+  const hit = inReach && (W.melee || Math.random() > (W.spread * 4 + tg.d / W.range * 0.35)) ? tg.o.id : null;
+  me.aimDir.copy(dir); me.aimT = 0.9;
+  if (!W.melee) me.aimYaw = Math.atan2(dir.x, dir.z); else me.ry = Math.atan2(dir.x, dir.z);
   net({ t: 'shoot', w: me.w, dir: [+dir.x.toFixed(3), +dir.y.toFixed(3), +dir.z.toFixed(3)], hit });
   if (W.melee) { if (me.char.userData.human) emote(me.char, 'Punch_Jab'); sfx.punch(); return; }
-  me.profile.guns[me.w]--; updateWeaponHud();
+  me.profile.guns[me.w]--; me.clip[me.w]--;
   shotFx(me.gun, dir, hit ? tg.p : null, from, W.range, true, me.w);
+  if (me.clip[me.w] <= 0 && totalAmmo(me.w) > 0) startReload(); else updateWeaponHud();
+}
+function startReload() {
+  if (me.reloadT > 0 || !CLIP[me.w]) return;
+  me.reloadT = RELOAD[me.w]; sfx.click(); setTimeout(() => sfx.click(), RELOAD[me.w] * 700); updateWeaponHud();
 }
 // вспышка у ствола, трассер, облачко в месте попадания, звук
 function shotFx(gun, dir, hitP, from, range, mine, w) {
@@ -940,7 +997,7 @@ function onShotMsg(m) {
   const dir = new THREE.Vector3(...m.d), from = new THREE.Vector3(...m.o);
   o.aimDir = dir; o.aimT = 0.9; o.w = m.w;
   if (WEAPONS[m.w]?.melee) { if (o.char.userData.human) emote(o.char, 'Punch_Jab'); return; }
-  const tgt = m.hit === me.id ? new THREE.Vector3(me.x, (me.visY ?? me.y) + 1.1, me.z) : m.hit && others.get(m.hit) ? new THREE.Vector3(others.get(m.hit).c.x, others.get(m.hit).c.y + 1.1, others.get(m.hit).c.z) : null;
+  const tgt = m.hit === me.id ? new THREE.Vector3(me.x, (me.visY ?? me.y) + 1.1, me.z) : m.hit && others.get(m.hit) ? targetPos(others.get(m.hit)) : null;
   shotFx(o.gun, dir, tgt, from, WEAPONS[m.w]?.range || 40, false, m.w);
 }
 function killFeed(text) {
@@ -948,12 +1005,28 @@ function killFeed(text) {
   while ($('feed').children.length > 4) $('feed').lastChild.remove();
   setTimeout(() => d.remove(), 6000);
 }
-// каждый кадр: оружие в руках у меня и у других, прицел, метка цели
+// цвет метки — здоровье цели: зелёный → жёлтый → красный (как в GTA SA)
+const hpColor = hp => `hsl(${Math.round(clamp(hp, 0, 100) * 1.2)}, 90%, 50%)`;
+// каждый кадр: прицел, оружие в руках у меня и у других, метка цели
 function updateCombat(dt, now) {
   fx?.update(dt);
+  const W = WEAPONS[me.w];
+  if (me.reloadT > 0) { me.reloadT -= dt; if (me.reloadT <= 0) { me.reloadT = 0; me.clip[me.w] = Math.min(CLIP[me.w] || 0, totalAmmo(me.w)); updateWeaponHud(); } }
+  // цель держится, пока жмёшь огонь; пропала из виду на полсекунды, умерла или далеко — сброс
+  if (lockT) {
+    const o = lockT.o, alive = others.has(o.id) && !o.dead;
+    const d = alive ? targetPos(o).distanceTo(eyePos()) : Infinity;
+    if (frame % 6 === 0 && alive && !W.melee) losT = wallBetween(eyePos(), targetPos(o)) ? losT + dt * 6 : 0;
+    if (!alive || d > (W.melee ? 3 : W.range * 1.15) || losT > 0.5 || (!fireHeld && me.aimT <= 0)) lockT = null;
+  }
   if (fireHeld) fire(now);
   me.aimT = Math.max(0, me.aimT - dt);
-  if (me.gun) { me.gun.visible = me.mode === 'foot' && !me.dead; if (me.gun.visible) poseWeapon(me.char, me.gun, me.aimDir, me.aimT > 0); }
+  me.aiming = me.mode === 'foot' && !me.dead && !W.melee && (fireHeld || me.aimT > 0);
+  if (me.aiming) {
+    if (lockT) { const p = targetPos(lockT.o), e = eyePos(); me.aimDir.copy(p).sub(e).normalize(); me.aimYaw = Math.atan2(p.x - e.x, p.z - e.z); }
+    else { camera.getWorldDirection(me.aimDir); me.aimYaw = Math.atan2(me.aimDir.x, me.aimDir.z); }
+  }
+  if (me.gun) { me.gun.visible = me.mode === 'foot' && !me.dead; if (me.gun.visible) poseWeapon(me.char, me.gun, me.aimDir, me.aiming && me.reloadT <= 0); }
   for (const o of others.values()) {
     if ((o.w || 'fist') !== (o.gun?.userData.type || 'fist')) setGunMesh(o, o.w);
     if (!o.gun) continue;
@@ -961,20 +1034,15 @@ function updateCombat(dt, now) {
     o.gun.visible = !o.mode && o.char.visible;
     if (o.gun.visible) poseWeapon(o.char, o.gun, o.aimDir || new THREE.Vector3(0, 0, 1), o.aimT > 0);
   }
-  // метка автонаводки над целью
-  const W = WEAPONS[me.w], lk = $('lock');
-  if (frame % 6 === 0) {
-    lockT = null;
-    if (me.mode === 'foot' && !me.dead && !W.melee) {
-      const from = new THREE.Vector3(me.x, (me.visY ?? me.y) + 1.45, me.z);
-      lockT = pickTarget(from, camera.getWorldDirection(new THREE.Vector3()), others, W.range, mobile ? 0.55 : 0.32, wallBetween);
-    }
-  }
-  if (lockT) {
-    const p = lockT.p.clone().project(camera);
-    lk.style.transform = `translate(${(p.x * 0.5 + 0.5) * innerWidth - 18}px, ${(-p.y * 0.5 + 0.5) * innerHeight - 18}px)`;
+  // метка над целью (только пока целимся) и прицел-крестик при стрельбе «в никуда»
+  const lk = $('lock'), showLock = lockT && (fireHeld || me.aimT > 0);
+  if (showLock) {
+    const p = targetPos(lockT.o).project(camera);
+    lk.style.transform = `translate(${(p.x * 0.5 + 0.5) * innerWidth - 24}px, ${(-p.y * 0.5 + 0.5) * innerHeight - 24}px)`;
+    lk.style.color = hpColor(lockT.o.hp ?? 100);
     lk.classList.toggle('hide', p.z > 1);
   } else lk.classList.add('hide');
+  $('xhair').classList.toggle('hide', !(me.aiming && !lockT));
 }
 
 // ---------- семья ----------
@@ -1305,13 +1373,17 @@ function updateCam(dt, now) {
     cam.yaw = lerpAng(cam.yaw, car.ry + (car.speed < -2 ? Math.PI : 0), Math.min(1, dt * 2.8));
     cam.pitch += (0.2 - cam.pitch) * Math.min(1, dt * 2);
   }
-  // пешком на бегу камера сама плавно заходит за спину (если не бежишь прямо на неё)
-  if (!inCar && me.spd > 1.5 && now - cam.dragT > 1200) {
+  // прицел на цели: камера встаёт за спину и смотрит туда же, куда персонаж (как в GTA SA)
+  if (!inCar && me.aiming && lockT) {
+    cam.yaw = lerpAng(cam.yaw, me.aimYaw, Math.min(1, dt * 6));
+    cam.pitch += (0.16 - cam.pitch) * Math.min(1, dt * 4);
+  } else if (!inCar && me.spd > 1.5 && now - cam.dragT > 1200) { // пешком на бегу камера сама плавно заходит за спину (если не бежишь прямо на неё)
     const diff = Math.atan2(Math.sin(me.ry - cam.yaw), Math.cos(me.ry - cam.yaw));
     if (Math.abs(diff) < 2.3) cam.yaw = lerpAng(cam.yaw, me.ry, Math.min(1, dt * (me.spd > 6 ? 1.6 : 0.9)));
     cam.pitch += (0.22 - cam.pitch) * Math.min(1, dt * 0.8);
   }
-  const dist = inCar ? [8.5, 13, 5.5][cam.mode] : [4.2, 6.5, 2.6][cam.mode] + Math.max(0, me.spd - 5) * 0.25;
+  cam.aimK = (cam.aimK || 0) + ((!inCar && me.aiming ? 1 : 0) - (cam.aimK || 0)) * Math.min(1, dt * 6);
+  const dist = inCar ? [8.5, 13, 5.5][cam.mode] : ([4.2, 6.5, 2.6][cam.mode] + Math.max(0, me.spd - 5) * 0.25) * (1 - cam.aimK * 0.22);
   const cp = Math.cos(cam.pitch), sp = Math.sin(cam.pitch);
   const ox = -Math.sin(cam.yaw) * cp, oy = sp, oz = -Math.cos(cam.yaw) * cp;
   let d = dist;
@@ -1337,9 +1409,16 @@ function loop(now) {
   animateCar(car.mesh, car.speed, -car.steer * 1.3, dt, car.braking, night);
   if (inCar) { me.x = car.x; me.z = car.z; me.y = car.y; }
   me.char.rotation.order = 'YXZ';
+  // с оружием на ходу (как в GTA SA): ноги идут куда жмёшь, корпус смотрит на цель, назад — пятимся
+  let legYaw = me.ry, twist = 0, rev = false;
+  if (me.aiming && !inCar && me.spd > 0.3) {
+    const rel = Math.atan2(Math.sin(me.moveYaw - me.ry), Math.cos(me.moveYaw - me.ry));
+    rev = Math.abs(rel) > 1.9; legYaw = rev ? me.moveYaw + Math.PI : me.moveYaw;
+    twist = Math.atan2(Math.sin(me.ry - legYaw), Math.cos(me.ry - legYaw));
+  }
   if (inCar || me.dead) { me.char.position.set(me.x, me.y, me.z); me.char.rotation.set(0, me.ry, 0); }
-  else { me.char.position.set(me.x, me.visY ?? me.y, me.z); me.char.rotation.set(me.lean, me.ry, me.roll); }
-  animChar(me.char, me.spd, !me.onGround, dt, now / 1000, me.dead);
+  else { me.char.position.set(me.x, me.visY ?? me.y, me.z); me.char.rotation.set(me.lean, legYaw, me.roll); }
+  animChar(me.char, me.spd, !me.onGround, dt, now / 1000, me.dead, twist, rev);
   // коробка в руках: у грузчика и у доставщика, пока идёт пешком
   const carry = !inCar && !me.dead && (!!me.load || !!me.job);
   if (carry && carried.parent !== me.char) me.char.add(carried);
@@ -1424,7 +1503,7 @@ function loop(now) {
   if (me.test) { const s = Math.max(0, Math.ceil((testEndAt - now) / 1000)); const txt = t('testLeft', s); if ($('testT').textContent !== txt) $('testT').textContent = txt; }
   updateSound(inCar && !me.dead, car.speed, inCar ? Math.max(input.gas, (input.keys.KeyW || input.keys.ArrowUp) ? 1 : 0) : 0, night > 0.5, cityMask(ax, az) < 0.3);
   const nc = nearestCity(ax, az), cid = nc.inside ? nc.city.id : null;
-  if (cid !== lastCity) { if (cid) toast(t('welcome', cityName(cid)), 2500, '#ffd36a'); lastCity = cid; $('cityName').textContent = cid ? cityName(cid) : t('desert'); }
+  if (cid !== lastCity) { lastCity = cid; const nm = cid ? cityName(cid) : t('desert'); $('cityName').textContent = nm; flashName('zone', nm); } // название района внизу справа, как в GTA SA
   if (inCar && frame % 3 === 0) drawSpeedo(car.speed);
   if (frame % 2 === 0) drawMini();
 

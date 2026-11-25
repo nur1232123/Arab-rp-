@@ -99,7 +99,7 @@ export function initRP(ctx) {
         const dmg = W.dmg * (t.mode ? 0.5 : 1);
         t.prof.hp = Math.max(0, t.prof.hp - dmg); touch(t.token); vit(t);
         send(t.ws, { t: 'hurt', from: q.id, dmg });
-        send(ws, { t: 'hitok', id: t.id });
+        send(ws, { t: 'hitok', id: t.id, hp: Math.round(t.prof.hp) });
         if (t.prof.hp <= 0) { broadcast({ t: 'kill', killer: P.name, victim: t.prof.name, w: q.w }); kill(t); }
         return true;
       }

@@ -285,9 +285,13 @@ function play(h, name, fade = 0.2) {
 }
 
 // speed — м/с по земле, air — в воздухе, dead — упал
-export function animateHuman(h, speed, air, dt, dead = false) {
+// twist — поворот корпуса относительно ног (стрельба на ходу боком), rev — ноги идут назад
+const _ax = new THREE.Vector3(), _q = new THREE.Quaternion(), _pq = new THREE.Quaternion();
+export function animateHuman(h, speed, air, dt, dead = false, twist = 0, rev = false) {
   const u = h.userData;
   u.t += dt;
+  // прошлый поворот корпуса снимаем (не все анимации двигают позвоночник — иначе он накопится)
+  if (u.spineQ) { u.spine.forEach((b, i) => b.quaternion.copy(u.spineQ[i])); u.spineQ = null; }
   // ткань: колышется сильнее на бегу и в прыжке
   const flap = 0.004 + Math.min(speed, 8) * 0.0035 + (air ? 0.012 : 0);
   for (const f of u.flaps) { f.uT.value = u.t; f.uFlap.value += (flap - f.uFlap.value) * Math.min(1, dt * 4); }
@@ -303,7 +307,21 @@ export function animateHuman(h, speed, air, dt, dead = false) {
   else if (speed > 2.6) { n = 'Jog_Fwd_Loop'; ts = speed / 5; }
   else if (speed > 0.25) { n = 'Walk_Loop'; ts = Math.max(0.6, speed / 1.8); }
   const a = play(h, n, n === 'Jump_Loop' ? 0.12 : 0.22);
-  if (u.actions[u.cur]) u.actions[u.cur].timeScale = ts;
+  if (u.actions[u.cur]) u.actions[u.cur].timeScale = rev ? -ts : ts;
   u.mixer.update(dt);
+  // корпус смотрит на цель, ноги — туда, куда идём: поворот делится на три позвонка
+  if (twist && !dead) {
+    const sp = u.spine || (u.spine = ['spine_01', 'spine_02', 'spine_03'].map(n => h.getObjectByName(n)).filter(Boolean));
+    if (sp.length) {
+      u.spineQ = sp.map(b => b.quaternion.clone());
+      h.updateMatrixWorld(true);
+      for (const b of sp) {
+        b.parent.getWorldQuaternion(_pq).invert();
+        _ax.set(0, 1, 0).applyQuaternion(_pq).normalize();
+        b.quaternion.premultiply(_q.setFromAxisAngle(_ax, twist / sp.length));
+        b.updateMatrixWorld(true);
+      }
+    }
+  }
 }
 export function emote(h, name) { const a = play(h, name, 0.2); return a; }
