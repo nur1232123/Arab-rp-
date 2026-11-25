@@ -11,6 +11,11 @@ const DIR = '/models/human/';
 let base = null, loading = null;
 const variants = {}; // outfit -> готовый шаблон (сцена с одеждой)
 
+// Реалистичные люди Microsoft Rocketbox (MIT): у каждого своя одежда.
+// Анимации берутся у персонажа Quaternius и переносятся на их скелет (Biped).
+const RB = ['shemagh', 'ghutra', 'thobe', 'casual', 'hoodie', 'sport', 'suit'];
+const rb = {}; // имя -> { scene, clips }
+
 export const humanReady = () => !!base;
 
 export function loadHuman() {
@@ -22,14 +27,154 @@ export function loadHuman() {
     loader.loadAsync(DIR + 'char_male.glb'), loader.loadAsync(DIR + 'anims.glb'),
     loader.loadAsync(DIR + 'hair_beard.glb'), loader.loadAsync(DIR + 'hair_buzzed.glb'),
     tex('skin_male_light.webp'), tex('skin_male_dark.webp'),
-  ]).then(([ch, an, beard, buzz, light, dark]) => {
+    Promise.all(RB.map(n => loader.loadAsync(DIR + 'rb/' + n + '.glb').catch(e => { console.warn('rb load failed', n, e); return null; }))),
+  ]).then(([ch, an, beard, buzz, light, dark, rbs]) => {
     const clips = {}; for (const c of an.animations) clips[c.name] = c;
     // высота ~1.8 м
     const box = new THREE.Box3().setFromObject(ch.scene); const h = box.max.y - box.min.y;
     base = { scene: ch.scene, clips, beard: beard.scene, buzz: buzz.scene, light, dark, scale: h > 0.5 && h < 4 ? 1.8 / h : 1 };
+    const src = sampleSource(ch.scene, clips);
+    RB.forEach((n, i) => { if (rbs[i]) try { rb[n] = prepRB(rbs[i].scene, src); } catch (e) { console.warn('retarget failed', n, e); } });
     return base;
   }).catch(e => { console.warn('human load failed', e); loading = null; throw e; });
   return loading;
+}
+
+// ---------- перенос анимаций на скелет Rocketbox ----------
+// пары костей: Quaternius (UE) -> Biped; третий элемент — дочерние кости для направления
+const MAP = [['pelvis', 'Pelvis', 'spine_01|Spine'], ['spine_01', 'Spine', 'spine_02|Spine1'], ['spine_02', 'Spine1', 'spine_03|Spine2'],
+  ['spine_03', 'Spine2', 'neck_01|Neck'], ['neck_01', 'Neck', 'Head|Head'], ['Head', 'Head', '']];
+for (const [s, S] of [['l', 'L'], ['r', 'R']]) {
+  MAP.push([`clavicle_${s}`, `${S}_Clavicle`, `upperarm_${s}|${S}_UpperArm`], [`upperarm_${s}`, `${S}_UpperArm`, `lowerarm_${s}|${S}_Forearm`],
+    [`lowerarm_${s}`, `${S}_Forearm`, `hand_${s}|${S}_Hand`], [`hand_${s}`, `${S}_Hand`, `middle_01_${s}|${S}_Finger2`],
+    [`thigh_${s}`, `${S}_Thigh`, `calf_${s}|${S}_Calf`], [`calf_${s}`, `${S}_Calf`, `foot_${s}|${S}_Foot`],
+    [`foot_${s}`, `${S}_Foot`, `ball_${s}|${S}_Toe0`], [`ball_${s}`, `${S}_Toe0`, '']);
+  ['thumb', 'index', 'middle', 'ring', 'pinky'].forEach((f, k) => {
+    for (let j = 1; j <= 3; j++) MAP.push([`${f}_0${j}_${s}`, `${S}_Finger${k}${j > 1 ? j - 1 : ''}`, j < 3 ? `${f}_0${j + 1}_${s}|${S}_Finger${k}${j}` : '']);
+  });
+}
+const FPS = 30;
+const _v1 = new THREE.Vector3(), _v2 = new THREE.Vector3();
+
+// позы исходного персонажа по кадрам: мировые повороты костей и положение таза
+function sampleSource(scene, clips) {
+  const root = SkeletonUtils.clone(scene); root.updateMatrixWorld(true);
+  const get = n => root.getObjectByName(n);
+  const bones = MAP.map(m => get(m[0]));
+  const rest = { q: bones.map(b => b && b.getWorldQuaternion(new THREE.Quaternion())), pos: {}, pelvis: get('pelvis').getWorldPosition(new THREE.Vector3()) };
+  root.traverse(o => { if (o.isBone) rest.pos[o.name] = o.getWorldPosition(new THREE.Vector3()); });
+  const box = new THREE.Box3().setFromObject(root), height = box.max.y - box.min.y;
+  const mixer = new THREE.AnimationMixer(root), out = {};
+  for (const [name, clip] of Object.entries(clips)) {
+    mixer.stopAllAction(); const a = mixer.clipAction(clip); a.play();
+    const n = Math.max(2, Math.round(clip.duration * FPS) + 1), frames = [];
+    for (let i = 0; i < n; i++) {
+      a.time = Math.min(clip.duration, i / FPS); mixer.update(0); root.updateMatrixWorld(true);
+      frames.push({ q: bones.map(b => b && b.getWorldQuaternion(new THREE.Quaternion())), p: get('pelvis').getWorldPosition(new THREE.Vector3()) });
+    }
+    a.stop(); mixer.uncacheAction(clip);
+    out[name] = { duration: clip.duration, frames };
+  }
+  return { rest, height, clips: out };
+}
+
+function prepRB(scene, src) {
+  scene.updateMatrixWorld(true);
+  const byName = {}; scene.traverse(o => { if (o.isBone) byName[o.name] = o; });
+  const B = n => byName['Bip01_' + n];
+  const box = new THREE.Box3().setFromObject(scene), height = box.max.y - box.min.y;
+  const k = height / src.height;
+  // поправка позы покоя: кость Biped поворачиваем так, чтобы она смотрела туда же, куда в позе покоя исходника
+  const pairs = MAP.map((m, i) => {
+    const t = B(m[1]); if (!t || !src.rest.q[i]) return null;
+    const restT = t.getWorldQuaternion(new THREE.Quaternion());
+    const align = new THREE.Quaternion();
+    if (m[2]) {
+      const [cs, ct] = m[2].split('|'), sp = src.rest.pos[m[0]], sc = src.rest.pos[cs], tc = B(ct);
+      if (sp && sc && tc) {
+        _v1.subVectors(sc, sp).normalize();
+        _v2.subVectors(tc.getWorldPosition(new THREE.Vector3()), t.getWorldPosition(new THREE.Vector3())).normalize();
+        align.setFromUnitVectors(_v2, _v1);
+      }
+    }
+    return { i, t, restT: align.multiply(restT), invS: src.rest.q[i].clone().invert() };
+  }).filter(Boolean);
+  // кости — сверху вниз, чтобы родитель был посчитан раньше
+  const depth = o => { let d = 0; while (o.parent) { d++; o = o.parent; } return d; };
+  pairs.sort((a, b) => depth(a.t) - depth(b.t));
+  const pelvis = B('Pelvis'), pelvisRest = pelvis.getWorldPosition(new THREE.Vector3());
+  const pelvisParentInv = pelvis.parent.matrixWorld.clone().invert();
+  const clips = {};
+  const world = new Map(), q = new THREE.Quaternion(), pq = new THREE.Quaternion();
+  for (const [name, c] of Object.entries(src.clips)) {
+    const times = c.frames.map((_, i) => Math.min(c.duration, i / FPS));
+    const vals = pairs.map(() => []), pos = [];
+    for (const f of c.frames) {
+      world.clear();
+      for (let j = 0; j < pairs.length; j++) {
+        const p = pairs[j];
+        const w = f.q[p.i].clone().multiply(p.invS).multiply(p.restT);
+        world.set(p.t, w);
+        // мировой поворот родителя: посчитанный (если он из пары) или из позы покоя
+        let par = p.t.parent, chain = [];
+        while (par && !world.has(par) && par.isBone) { chain.push(par); par = par.parent; }
+        if (par && world.has(par)) { pq.copy(world.get(par)); for (let c2 = chain.length - 1; c2 >= 0; c2--) pq.multiply(chain[c2].quaternion); }
+        else p.t.parent.getWorldQuaternion(pq);
+        q.copy(pq).invert().multiply(w);
+        vals[j].push(q.x, q.y, q.z, q.w);
+      }
+      _v1.subVectors(f.p, src.rest.pelvis).multiplyScalar(k).add(pelvisRest).applyMatrix4(pelvisParentInv);
+      pos.push(_v1.x, _v1.y, _v1.z);
+    }
+    const tracks = pairs.map((p, j) => new THREE.QuaternionKeyframeTrack(p.t.name + '.quaternion', times, vals[j]));
+    tracks.push(new THREE.VectorKeyframeTrack(pelvis.name + '.position', times, pos));
+    clips[name] = new THREE.AnimationClip(name, c.duration, tracks);
+  }
+  scene.traverse(o => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } });
+  return { scene, clips, spine: ['Spine', 'Spine1', 'Spine2'].map(n => 'Bip01_' + n) };
+}
+
+// какой человек Rocketbox подходит к образу
+function rbFor(look) {
+  const dark = SKINS.indexOf(look.skin) >= 2;
+  const n = look.outfit === 'thobe' || look.outfit === 'bisht'
+    ? (look.head === 'shemagh' ? 'shemagh' : look.head === 'ghutra' || look.head === 'black' ? 'ghutra' : 'thobe')
+    : look.outfit === 'casual' ? (dark ? 'hoodie' : 'casual') : look.outfit;
+  return rb[n] ? n : null;
+}
+
+function makeRB(look, n) {
+  const R = rb[n];
+  const root = SkeletonUtils.clone(R.scene);
+  if (look.outfit === 'bisht') { // бишт: тёмный плащ поверх тоба
+    let body = null; root.traverse(o => { if (o.isSkinnedMesh && /body/.test(o.material.name)) body = o; });
+    if (body) {
+      // сетка Rocketbox лежит «Z вверх, перед — минус Y»: открытый перед плаща, низ — до колен
+      const cloak = shell(body, (bn, p) => /Spine|Clavicle|UpperArm|Forearm|Pelvis|Thigh|Calf/.test(bn) && !(p.y < -0.02 && Math.abs(p.x) < 0.09) && p.z > 0.45, 0.022, clothMat('#1b1714'));
+      body.parent.add(cloak);
+    }
+  }
+  if (look.glasses) {
+    const head = root.getObjectByName('Bip01_Head'), nose = root.getObjectByName('Bip01_MNose');
+    if (head && nose) {
+      root.updateMatrixWorld(true);
+      const gm = new THREE.MeshStandardMaterial({ color: '#0d0d0f', metalness: 0.6, roughness: 0.2 });
+      const g = new THREE.Group(), np = nose.getWorldPosition(new THREE.Vector3());
+      for (const s of [-1, 1]) g.add(new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.022, 0.006), gm).translateX(s * 0.033));
+      g.add(new THREE.Mesh(new THREE.BoxGeometry(0.135, 0.006, 0.006), gm).translateY(0.008));
+      g.position.set(np.x, np.y + 0.03, np.z + 0.01);
+      head.attach(g);
+    }
+  }
+  root.traverse(o => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } });
+  const holder = new THREE.Group(); holder.add(root);
+  holder.rotation.order = 'YXZ';
+  const mixer = new THREE.AnimationMixer(root), actions = {};
+  for (const [nm, c] of Object.entries(R.clips)) actions[nm] = mixer.clipAction(c);
+  for (const nm of ['Jump_Start', 'Jump_Land', 'Death01', 'Interact', 'Punch_Jab']) if (actions[nm]) { actions[nm].setLoop(THREE.LoopOnce); actions[nm].clampWhenFinished = true; }
+  holder.userData = { mixer, actions, cur: null, human: true, flaps: [], t: 0, landT: 0, look, spineNames: R.spine };
+  play(holder, 'Idle_Loop', 0);
+  return holder;
 }
 
 // ---------- одежда ----------
@@ -247,6 +392,7 @@ function addFlap(mat, flaps) {
 
 export function makeHuman(lookIn = {}) {
   const look = { outfit: 'thobe', head: 'shemagh', cloth: '#f6f6f2', beard: true, glasses: false, skin: SKINS[1], ...lookIn };
+  const rn = rbFor(look); if (rn) return makeRB(look, rn);
   const key = [look.outfit, look.head, look.beard ? 1 : 0, look.glasses ? 1 : 0].join('|');
   if (!variants[key]) variants[key] = buildVariant(look);
   const root = SkeletonUtils.clone(variants[key]);
@@ -311,7 +457,7 @@ export function animateHuman(h, speed, air, dt, dead = false, twist = 0, rev = f
   u.mixer.update(dt);
   // корпус смотрит на цель, ноги — туда, куда идём: поворот делится на три позвонка
   if (twist && !dead) {
-    const sp = u.spine || (u.spine = ['spine_01', 'spine_02', 'spine_03'].map(n => h.getObjectByName(n)).filter(Boolean));
+    const sp = u.spine || (u.spine = (u.spineNames || ['spine_01', 'spine_02', 'spine_03']).map(n => h.getObjectByName(n)).filter(Boolean));
     if (sp.length) {
       u.spineQ = sp.map(b => b.quaternion.clone());
       h.updateMatrixWorld(true);

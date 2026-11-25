@@ -21,7 +21,9 @@ NO_ANTICHEAT=1 npm start           # для тестов: разрешает т�
 | `public/js/build.js` | Построение статичного мира: склейка в чанки, LOD, коллизии, маркеры |
 | `public/js/main.js` | Игровой цикл, ввод, физика пешком и в машине, камера, сеть, HUD, радар |
 | `public/js/cars.js` | Машины: процедурные и GLB-модели (`public/models/*.glb`) |
-| `public/js/human.js` | Персонаж со скелетом (Quaternius CC0), тоб, шемаг, анимации |
+| `public/js/human.js` | Персонажи: реалистичные люди Rocketbox (`public/models/human/rb/*.glb`, MIT), анимации Quaternius переносятся на их скелет при загрузке; старый Quaternius — запасной |
+| `public/js/combat.js` | Оружие в руках, эффекты выстрелов |
+| `tools/rocketbox2glb.py` | Конвертер людей Rocketbox (FBX2glTF → GLB с webp) |
 | `public/js/char.js` | Простой запасной персонаж |
 | `tools/usdz2glb.py` | Конвертер моделей машин из USDZ в GLB |
 

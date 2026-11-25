@@ -179,8 +179,13 @@ input{font:inherit}
 #bFire{background:radial-gradient(circle at 38% 32%,rgba(140,140,140,.75),rgba(30,30,30,.75));border:3px solid rgba(0,0,0,.8);box-shadow:0 0 0 2px rgba(255,255,255,.3)}
 #bFire svg{width:62%;height:62%}
 #bFire.on{background:radial-gradient(circle at 38% 32%,rgba(200,200,200,.85),rgba(60,60,60,.85))}
-#xhair{position:absolute;left:50%;top:45%;width:22px;height:22px;margin:-11px 0 0 -11px;pointer-events:none;
-  background:linear-gradient(#fff,#fff) center/2px 8px no-repeat,linear-gradient(#fff,#fff) center/8px 2px no-repeat;opacity:.8;filter:drop-shadow(0 0 2px #000)}
+#xhair{position:absolute;left:50%;top:45%;width:30px;height:30px;margin:-15px 0 0 -15px;pointer-events:none;color:#fff;opacity:.9;filter:drop-shadow(0 0 1.5px #000);transition:transform .08s}
+#xhair::before,#xhair::after{content:'';position:absolute;inset:0;background:
+  linear-gradient(currentColor,currentColor) 50% 0/2px 9px no-repeat,linear-gradient(currentColor,currentColor) 50% 100%/2px 9px no-repeat,
+  linear-gradient(currentColor,currentColor) 0 50%/9px 2px no-repeat,linear-gradient(currentColor,currentColor) 100% 50%/9px 2px no-repeat}
+#xhair::after{inset:13px;border-radius:50%;background:currentColor}
+#xhair.hot{color:#ff3b30}
+#xhair.kick{transform:scale(1.35)}
 #lock{position:absolute;left:0;top:0;width:48px;height:48px;pointer-events:none;color:#3f3}
 #lock svg{width:100%;height:100%;animation:lockspin 2.4s linear infinite;filter:drop-shadow(0 0 3px rgba(0,0,0,.8))}
 @keyframes lockspin{to{transform:rotate(360deg)}}

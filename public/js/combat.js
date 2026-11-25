@@ -1,4 +1,4 @@
-// Бой: оружие в руках, прицел с автонаводкой (как на телефонах в старых GTA), выстрелы, эффекты.
+// Бой: оружие в руках, выстрелы, эффекты (прицел — в main.js).
 // Урон и патроны считает сервер: клиент шлёт только «выстрелил вот туда, попал вот в этого».
 import * as THREE from 'three';
 import { WEAPONS, WEAPON_ORDER } from '../shared/world.js';
@@ -33,9 +33,11 @@ function aimBone(bone, child, dir, k = 1) {
   bone.quaternion.copy(pq.multiply(wq));
   bone.updateWorldMatrix(false, true);
 }
+// кости руки: скелет Quaternius (upperarm_r) или Biped у людей Rocketbox (Bip01_R_UpperArm)
+const bone = (ch, a, b) => ch.getObjectByName(a) || ch.getObjectByName(b);
 const bones = ch => ch.userData.bones || (ch.userData.bones = {
-  ua: ch.getObjectByName('upperarm_r'), la: ch.getObjectByName('lowerarm_r'), hand: ch.getObjectByName('hand_r'),
-  ual: ch.getObjectByName('upperarm_l'), lal: ch.getObjectByName('lowerarm_l'), handl: ch.getObjectByName('hand_l'),
+  ua: bone(ch, 'upperarm_r', 'Bip01_R_UpperArm'), la: bone(ch, 'lowerarm_r', 'Bip01_R_Forearm'), hand: bone(ch, 'hand_r', 'Bip01_R_Hand'),
+  ual: bone(ch, 'upperarm_l', 'Bip01_L_UpperArm'), lal: bone(ch, 'lowerarm_l', 'Bip01_L_Forearm'), handl: bone(ch, 'hand_l', 'Bip01_L_Hand'),
 });
 
 // держит оружие персонажа ch: при прицеливании — рука к цели, иначе ствол опущен вдоль тела

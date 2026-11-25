@@ -889,8 +889,9 @@ function renderInv() {
   $('invList').querySelectorAll('[data-use]').forEach(b => b.onclick = () => net({ t: 'use', item: b.dataset.use }));
 }
 // ---------- бой ----------
-// Как в GTA SA: зажал «огонь» — персонаж берёт на прицел ближайшего (метка над целью цвета её здоровья),
-// поворачивается к нему и стреляет, пока держишь; джойстик в это время двигает шагом вбок и назад.
+// Как в Black Russia: с оружием в руках камера встаёт из-за правого плеча, в центре экрана прицел.
+// Пули летят туда, куда смотрит прицел (камеру крутишь пальцем), прицел краснеет на игроке.
+// Пока стреляешь, персонаж смотрит туда же и ходит шагом вбок и назад. Кулаком бьём ближайшего.
 // У оружия есть обойма: кончилась — перезарядка. Патроны и урон всё равно считает сервер.
 let fx = null, fireHeld = false, lastShot = 0, lockT = null, srvOff = 0, losT = 0;
 const CLIP = { pistol: 17, smg: 30, rifle: 30 }, RELOAD = { pistol: 1.1, smg: 1.4, rifle: 1.6 };
@@ -948,7 +949,29 @@ function acquireLock() {
   const fwd = camera.getWorldDirection(new THREE.Vector3());
   return pickTarget(from, fwd, others, W.range, mobile ? 0.7 : 0.4, wallBetween) || pickTarget(from, fwd, others, W.range * 0.6, 2.2, wallBetween);
 }
-function startFire() { fireHeld = true; if (!lockT || !others.has(lockT.o.id)) lockT = acquireLock(); losT = 0; fire(performance.now()); }
+// луч из камеры через прицел: в кого попадёт (игрок — вертикальный цилиндр, машина — пошире)
+const _ray = new THREE.Raycaster(), XHAIR_NDC = new THREE.Vector2(0, 0.1); // прицел на 45% высоты экрана
+function aimTrace(W, spread, walls = true) {
+  _ray.setFromCamera(XHAIR_NDC, camera);
+  const O = _ray.ray.origin.clone(), D = _ray.ray.direction.clone();
+  if (spread) { const s = W.spread; D.x += (Math.random() - 0.5) * s; D.y += (Math.random() - 0.5) * s; D.z += (Math.random() - 0.5) * s; D.normalize(); }
+  const eye = eyePos(), near = O.distanceTo(eye), maxT = W.range + near, assist = mobile ? 0.2 : 0.08;
+  let best = null, bt = maxT;
+  const dd = D.x * D.x + D.z * D.z;
+  if (dd > 1e-6) for (const o of others.values()) {
+    if (o.dead || (!o.mode && !o.char?.visible)) continue;
+    const P = targetPos(o), base = P.y - 1.1, r = (o.mode ? 1.4 : 0.3) + assist, top = base + (o.mode ? 1.6 : 1.85);
+    const dx = O.x - P.x, dz = O.z - P.z, t = -(dx * D.x + dz * D.z) / dd;
+    if (t < near * 0.7 || t > bt) continue;
+    const hx = dx + t * D.x, hz = dz + t * D.z; if (hx * hx + hz * hz > r * r) continue;
+    const y = O.y + t * D.y; if (y < base - 0.1 || y > top + 0.1) continue;
+    best = o; bt = t;
+  }
+  const p = O.addScaledVector(D, bt);
+  if (best && walls && wallBetween(eye, p)) best = null;
+  return { o: best, p };
+}
+function startFire() { fireHeld = true; lockT = WEAPONS[me.w].melee && (!lockT || !others.has(lockT.o.id)) ? acquireLock() : WEAPONS[me.w].melee ? lockT : null; losT = 0; fire(performance.now()); }
 function stopFire() { fireHeld = false; }
 function fire(now) {
   if (me.mode !== 'foot' || me.dead || shopOpen()) return;
@@ -961,19 +984,24 @@ function fire(now) {
   }
   lastShot = now;
   const from = eyePos();
-  const tg = lockT && !lockT.o.dead && others.has(lockT.o.id) ? { o: lockT.o, p: targetPos(lockT.o), d: targetPos(lockT.o).distanceTo(from) } : null;
-  const fwd = camera.getWorldDirection(new THREE.Vector3());
-  const dir = tg ? tg.p.clone().sub(from).normalize() : W.melee ? new THREE.Vector3(Math.sin(me.ry), 0, Math.cos(me.ry)) : fwd.clone();
-  if (!W.melee) { const s = W.spread * (tg ? 0.6 : 1); dir.x += (Math.random() - 0.5) * s; dir.y += (Math.random() - 0.5) * s; dir.z += (Math.random() - 0.5) * s; dir.normalize(); }
-  // промах тем вероятнее, чем дальше цель и хуже оружие
-  const inReach = tg && tg.d <= W.range + 0.5;
-  const hit = inReach && (W.melee || Math.random() > (W.spread * 4 + tg.d / W.range * 0.35)) ? tg.o.id : null;
+  let dir, hit = null, hitP = null;
+  if (W.melee) { // кулак: ближайший перед собой
+    const tg = lockT && !lockT.o.dead && others.has(lockT.o.id) ? { o: lockT.o, p: targetPos(lockT.o), d: targetPos(lockT.o).distanceTo(from) } : null;
+    dir = tg ? tg.p.clone().sub(from).normalize() : new THREE.Vector3(Math.sin(me.ry), 0, Math.cos(me.ry));
+    if (tg && tg.d <= W.range + 0.5) hit = tg.o.id;
+    me.ry = Math.atan2(dir.x, dir.z);
+  } else { // пуля летит в точку под прицелом (с разбросом оружия)
+    const a = aimTrace(W, true);
+    dir = a.p.clone().sub(from).normalize();
+    if (a.o) { hit = a.o.id; hitP = a.p; }
+    me.aimYaw = Math.atan2(dir.x, dir.z);
+    const xh = $('xhair'); xh.classList.add('kick'); setTimeout(() => xh.classList.remove('kick'), 70);
+  }
   me.aimDir.copy(dir); me.aimT = 0.9;
-  if (!W.melee) me.aimYaw = Math.atan2(dir.x, dir.z); else me.ry = Math.atan2(dir.x, dir.z);
   net({ t: 'shoot', w: me.w, dir: [+dir.x.toFixed(3), +dir.y.toFixed(3), +dir.z.toFixed(3)], hit });
   if (W.melee) { if (me.char.userData.human) emote(me.char, 'Punch_Jab'); sfx.punch(); return; }
   me.profile.guns[me.w]--; me.clip[me.w]--;
-  shotFx(me.gun, dir, hit ? tg.p : null, from, W.range, true, me.w);
+  shotFx(me.gun, dir, hitP, from, W.range, true, me.w);
   if (me.clip[me.w] <= 0 && totalAmmo(me.w) > 0) startReload(); else updateWeaponHud();
 }
 function startReload() {
@@ -1022,9 +1050,13 @@ function updateCombat(dt, now) {
   if (fireHeld) fire(now);
   me.aimT = Math.max(0, me.aimT - dt);
   me.aiming = me.mode === 'foot' && !me.dead && !W.melee && (fireHeld || me.aimT > 0);
-  if (me.aiming) {
-    if (lockT) { const p = targetPos(lockT.o), e = eyePos(); me.aimDir.copy(p).sub(e).normalize(); me.aimYaw = Math.atan2(p.x - e.x, p.z - e.z); }
-    else { camera.getWorldDirection(me.aimDir); me.aimYaw = Math.atan2(me.aimDir.x, me.aimDir.z); }
+  // с огнестрелом в руках прицел всегда в центре; краснеет, когда под ним игрок
+  const armedGun = me.mode === 'foot' && !me.dead && !W.melee && !shopOpen();
+  let aimO = null;
+  if (armedGun) {
+    const a = aimTrace(W, false);
+    aimO = a.o;
+    if (me.aiming) { const e = eyePos(); me.aimDir.copy(a.p).sub(e).normalize(); me.aimYaw = Math.atan2(me.aimDir.x, me.aimDir.z); }
   }
   if (me.gun) { me.gun.visible = me.mode === 'foot' && !me.dead; if (me.gun.visible) poseWeapon(me.char, me.gun, me.aimDir, me.aiming && me.reloadT <= 0); }
   for (const o of others.values()) {
@@ -1035,14 +1067,10 @@ function updateCombat(dt, now) {
     if (o.gun.visible) poseWeapon(o.char, o.gun, o.aimDir || new THREE.Vector3(0, 0, 1), o.aimT > 0);
   }
   // метка над целью (только пока целимся) и прицел-крестик при стрельбе «в никуда»
-  const lk = $('lock'), showLock = lockT && (fireHeld || me.aimT > 0);
-  if (showLock) {
-    const p = targetPos(lockT.o).project(camera);
-    lk.style.transform = `translate(${(p.x * 0.5 + 0.5) * innerWidth - 24}px, ${(-p.y * 0.5 + 0.5) * innerHeight - 24}px)`;
-    lk.style.color = hpColor(lockT.o.hp ?? 100);
-    lk.classList.toggle('hide', p.z > 1);
-  } else lk.classList.add('hide');
-  $('xhair').classList.toggle('hide', !(me.aiming && !lockT));
+  $('lock').classList.add('hide');
+  const xh = $('xhair');
+  xh.classList.toggle('hide', !armedGun);
+  xh.classList.toggle('hot', !!aimO);
 }
 
 // ---------- семья ----------
@@ -1368,22 +1396,22 @@ function camBlocked(x, y, z) {
 }
 function updateCam(dt, now) {
   const inCar = me.mode === 'car';
-  const tx = inCar ? car.x : me.x, ty = inCar ? car.y + 1.6 : (me.visY ?? me.y) + 1.55, tz = inCar ? car.z : me.z;
+  let tx = inCar ? car.x : me.x, ty = inCar ? car.y + 1.6 : (me.visY ?? me.y) + 1.55, tz = inCar ? car.z : me.z;
   if (inCar && now - cam.dragT > 1300) {
     cam.yaw = lerpAng(cam.yaw, car.ry + (car.speed < -2 ? Math.PI : 0), Math.min(1, dt * 2.8));
     cam.pitch += (0.2 - cam.pitch) * Math.min(1, dt * 2);
   }
-  // прицел на цели: камера встаёт за спину и смотрит туда же, куда персонаж (как в GTA SA)
-  if (!inCar && me.aiming && lockT) {
-    cam.yaw = lerpAng(cam.yaw, me.aimYaw, Math.min(1, dt * 6));
-    cam.pitch += (0.16 - cam.pitch) * Math.min(1, dt * 4);
-  } else if (!inCar && me.spd > 1.5 && now - cam.dragT > 1200) { // пешком на бегу камера сама плавно заходит за спину (если не бежишь прямо на неё)
+  // с огнестрелом (как в Black Russia) камера сама не крутится: целишься, двигая её пальцем
+  const gunOut = !inCar && !me.dead && !WEAPONS[me.w].melee;
+  if (!inCar && !gunOut && me.spd > 1.5 && now - cam.dragT > 1200) { // пешком на бегу камера сама плавно заходит за спину (если не бежишь прямо на неё)
     const diff = Math.atan2(Math.sin(me.ry - cam.yaw), Math.cos(me.ry - cam.yaw));
     if (Math.abs(diff) < 2.3) cam.yaw = lerpAng(cam.yaw, me.ry, Math.min(1, dt * (me.spd > 6 ? 1.6 : 0.9)));
     cam.pitch += (0.22 - cam.pitch) * Math.min(1, dt * 0.8);
   }
-  cam.aimK = (cam.aimK || 0) + ((!inCar && me.aiming ? 1 : 0) - (cam.aimK || 0)) * Math.min(1, dt * 6);
-  const dist = inCar ? [8.5, 13, 5.5][cam.mode] : ([4.2, 6.5, 2.6][cam.mode] + Math.max(0, me.spd - 5) * 0.25) * (1 - cam.aimK * 0.22);
+  // оружие в руках — камера ближе и из-за правого плеча, при стрельбе ещё ближе
+  cam.aimK = (cam.aimK || 0) + ((gunOut ? (me.aiming ? 1 : 0.7) : 0) - (cam.aimK || 0)) * Math.min(1, dt * 6);
+  const dist = inCar ? [8.5, 13, 5.5][cam.mode] : ([4.2, 6.5, 2.6][cam.mode] + Math.max(0, me.spd - 5) * 0.25) * (1 - cam.aimK * 0.3);
+  if (!inCar) { const sh = cam.aimK * 0.62; tx += -Math.cos(cam.yaw) * sh; tz += Math.sin(cam.yaw) * sh; ty += cam.aimK * 0.1; }
   const cp = Math.cos(cam.pitch), sp = Math.sin(cam.pitch);
   const ox = -Math.sin(cam.yaw) * cp, oy = sp, oz = -Math.cos(cam.yaw) * cp;
   let d = dist;
@@ -1534,4 +1562,4 @@ $('action').onclick = () => {
   if (label === t('eat', FOOD_PRICE)) return net({ t: 'eat' });
   if (me.mode === 'foot') toggleCar();
 };
-Object.assign(window.__ar, { shopSel, renderShop, routeInfo: () => route && { n: route.pts.length } });
+Object.assign(window.__ar, { shopSel, renderShop, routeInfo: () => route && { n: route.pts.length }, others, aim: (walls = true) => { const a = aimTrace(WEAPONS[me.w], false, walls); return { id: a.o?.id ?? null, p: a.p.toArray().map(v => +v.toFixed(2)) }; } });
