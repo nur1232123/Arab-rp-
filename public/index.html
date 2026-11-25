@@ -156,6 +156,25 @@ input{font:inherit}
 .chip{padding:4px 9px;border-radius:9px;background:rgba(255,255,255,.1);border:1px solid var(--line);font-size:12.5px;font-weight:700}
 .chip.on{background:var(--gold);color:#2a1700;border-color:var(--gold)}
 .chip small{opacity:.75;font-size:11px;margin-inline-start:3px}
+/* ---------- бой, семья, захваты ---------- */
+#bWpn{display:flex;flex-direction:column;gap:0;line-height:1.05}
+#bWpn b{font-size:11.5px}#bWpn small{font-family:Rubik,sans-serif;font-size:12px;color:var(--gold2);min-height:1em}
+#bFire{background:rgba(200,40,40,.5)}
+#xhair{position:absolute;left:50%;top:45%;width:22px;height:22px;margin:-11px 0 0 -11px;pointer-events:none;
+  background:linear-gradient(#fff,#fff) center/2px 8px no-repeat,linear-gradient(#fff,#fff) center/8px 2px no-repeat;opacity:.8;filter:drop-shadow(0 0 2px #000)}
+#lock{position:absolute;left:0;top:0;width:36px;height:36px;border:2px solid #ff4d4d;border-radius:50%;pointer-events:none;box-shadow:0 0 6px #ff4d4d}
+#feed{position:absolute;top:calc(max(10px,env(safe-area-inset-top)) + 150px);display:flex;flex-direction:column;gap:3px;align-items:flex-end;font-size:13px;pointer-events:none}
+#feed div{background:rgba(0,0,0,.55);border-radius:8px;padding:2px 9px;unicode-bidi:plaintext}
+#hurtFx{position:fixed;inset:0;pointer-events:none;opacity:0;transition:opacity .35s;box-shadow:inset 0 0 120px 30px rgba(200,0,0,.75)}
+#hurtFx.on{opacity:1;transition:none}
+#capBar{position:absolute;left:50%;top:calc(max(10px,env(safe-area-inset-top)) + 54px);transform:translateX(-50%);background:rgba(0,0,0,.72);border:2px solid #fff;border-radius:12px;padding:5px 14px;font-weight:900;font-size:14px;white-space:nowrap;direction:rtl}
+#famInv{position:absolute;left:50%;top:34%;transform:translateX(-50%);background:rgba(20,16,12,.94);border:1px solid var(--gold);border-radius:14px;padding:10px 14px;display:flex;gap:10px;align-items:center;direction:rtl;z-index:5}
+#famInv button{padding:6px 12px;border-radius:10px;background:var(--gold);color:#2a1700;font-weight:900}
+#famInv #famDec{background:#444;color:#ddd}
+#famBody input{height:40px;border-radius:10px;border:1px solid var(--line);background:#0c0a08;color:#fff;padding:0 10px;font-size:15px;user-select:text;-webkit-user-select:text;min-width:0;flex:1}
+#famBody>input{width:100%;margin:6px 0}
+#famBody .play{width:100%;margin-top:12px}
+#famBody .play:disabled{background:#444;color:#999;box-shadow:none}
 #loading{position:fixed;inset:0;z-index:60;display:grid;place-items:center;background:#0b0809;font-size:22px;font-weight:900}
 @media (max-height:520px){.logo{font-size:38px}.sub{margin:2px 0 8px;font-size:15px}.reg{gap:8px;padding:12px}.opt{padding:5px 4px;font-size:13px}.opt i{height:22px;width:22px}.reg input{height:42px;font-size:16px}.play{height:46px;font-size:19px}.note{display:none}.skins button{width:34px;height:34px}}
 @media (orientation:landscape) and (max-height:560px){#map .sheet{display:grid;grid-template-columns:auto minmax(150px,220px);grid-template-rows:auto 1fr;gap:0 14px;width:auto;max-width:100%}#map h2{grid-column:1/-1}#bigmap{height:calc(100vh - 110px);width:auto;max-height:none}#map .tps{flex-direction:column;justify-content:flex-start;margin-top:0}}
@@ -202,6 +221,7 @@ input{font:inherit}
     <div class="menu p">
       <button class="ib" id="bMap" aria-label="map"><svg viewBox="0 0 24 24"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/></svg></button>
       <button class="ib" id="bInv" aria-label="bag"><svg viewBox="0 0 24 24"><path d="M5 8h14l-1 12H6zM9 8V6a3 3 0 0 1 6 0v2"/></svg></button>
+      <button class="ib" id="bFam" aria-label="family"><svg viewBox="0 0 24 24"><circle cx="8" cy="8" r="3"/><circle cx="16.5" cy="9" r="2.5"/><path d="M2.5 20a5.5 5.5 0 0 1 11 0M13.5 20a4 4 0 0 1 8 0"/></svg></button>
       <button class="ib" id="bChat" aria-label="chat"><svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></svg></button>
       <button class="ib" id="bCar" aria-label="car"><svg viewBox="0 0 24 24"><path d="M3 15l2-6h14l2 6v4H3zM7 19v1M17 19v1"/><circle cx="7.5" cy="15.5" r="1"/><circle cx="16.5" cy="15.5" r="1"/></svg></button>
       <button class="ib" id="bCam" aria-label="camera"><svg viewBox="0 0 24 24"><path d="M3 8h4l2-3h6l2 3h4v11H3z"/><circle cx="12" cy="13" r="3.5"/></svg></button>
@@ -221,7 +241,17 @@ input{font:inherit}
     <div class="bar"><svg viewBox="0 0 24 24"><path fill="#9fd36a" d="M14.7 6.3a4 4 0 0 0-5.4 5L3 17.6 6.4 21l6.3-6.3a4 4 0 0 0 5-5.4L15 12l-3-3z"/></svg><div class="tr"><div class="fl" id="chpF"></div></div></div>
   </div>
   <div id="joy" class="p sa-b sa-l"><div id="knob"></div></div>
+  <div id="xhair" class="hide"></div>
+  <div id="lock" class="hide"></div>
+  <div id="feed" class="sa-r"></div>
+  <div id="hurtFx"></div>
+  <div id="capBar" class="hide"></div>
+  <div id="famInv" class="hide p"><span id="famInvT"></span><button id="famAcc" data-i="accept">قبول</button><button id="famDec" data-i="decline">رفض</button></div>
   <div id="footBtns" class="rb sa-b sa-r p">
+    <div style="display:flex;flex-direction:column;gap:10px;align-self:flex-start;align-items:center">
+      <button class="cb" id="bWpn" aria-label="weapon" style="width:58px;height:58px"><b></b><small></small></button>
+    </div>
+    <button class="cb big hide" id="bFire" aria-label="fire"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5"/></svg></button>
     <button class="cb" id="bSprint" aria-label="sprint"><svg viewBox="0 0 24 24"><circle cx="14" cy="4.5" r="2"/><path d="M8 21l3-6 3 2v5M6 12l3-4 4 1 3 4 3 1M11 15l-1-4"/></svg></button>
     <button class="cb big" id="bJump" aria-label="jump"><svg viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button>
   </div>
@@ -269,6 +299,12 @@ input{font:inherit}
   <div class="sheet small">
     <h2><span data-i="inv">الحقيبة</span><button class="x" data-close data-i="close">إغلاق</button></h2>
     <div id="invList"></div>
+  </div>
+</div>
+<div id="famM" class="modal hide">
+  <div class="sheet small">
+    <h2><span data-i="fam">العائلة</span><button class="x" data-close data-i="close">إغلاق</button></h2>
+    <div id="famBody"></div>
   </div>
 </div>
 <div id="map" class="modal hide">

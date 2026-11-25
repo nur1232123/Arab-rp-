@@ -84,4 +84,14 @@ export const sfx = {
   pick() { if (ready()) { noiseHit(0.1, 700, 0.2); tone(300, 0.08, 0.06, 'triangle'); } },
   eat() { if (ready()) { noiseHit(0.12, 1200, 0.18, 'bandpass', 2); tone(520, 0.15, 0.06, 'sine', 0.12, 1.5); } },
   dead() { if (ready()) tone(330, 1.2, 0.15, 'triangle', 0, 0.4); },
+  // выстрел: хлопок шума + низкий «удар»; vol — громкость (дальние выстрелы тише)
+  gun(w, vol = 1) {
+    if (!ready() || vol <= 0.02) return;
+    const big = w === 'rifle' ? 1.3 : w === 'smg' ? 0.8 : 1;
+    noiseHit(0.12 * big, w === 'smg' ? 2600 : 1800, 0.55 * vol * big, 'lowpass', 0.8);
+    tone(w === 'rifle' ? 70 : 95, 0.12 * big, 0.3 * vol, 'sine', 0, 0.45);
+  },
+  punch() { if (ready()) { noiseHit(0.07, 600, 0.3); tone(110, 0.08, 0.12, 'sine', 0, 0.6); } },
+  hurt() { if (ready()) tone(180, 0.15, 0.12, 'square', 0, 0.6); },
+  hitmark() { if (ready()) tone(1400, 0.05, 0.08, 'square'); },
 };

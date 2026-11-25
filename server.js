@@ -12,6 +12,8 @@ import {
   cityPoints, streetPoint, nearestCity, cleanLook, owns, tuned, fuelUse,
 } from './public/shared/world.js';
 import { loadAll, save, usingDb } from './store.js';
+import { initRP } from './rp.js';
+let rp = null; // оружие, семьи, захваты — создаются после загрузки профилей
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3000;
@@ -48,13 +50,13 @@ async function flush() {
 }
 setInterval(flush, 10000);
 
-const pub = p => ({ name: p.name, money: p.money, cars: p.cars, car: p.car, color: p.color, skin: p.skin, hp: p.hp, hunger: p.hunger, look: p.look, wardrobe: p.wardrobe, fuels: p.fuels, chp: p.chp, tune: p.tune, inv: p.inv });
+const pub = p => ({ name: p.name, money: p.money, cars: p.cars, car: p.car, color: p.color, skin: p.skin, hp: p.hp, hunger: p.hunger, look: p.look, wardrobe: p.wardrobe, fuels: p.fuels, chp: p.chp, tune: p.tune, inv: p.inv, guns: p.guns, fam: p.fam || null });
 // бензин и здоровье машины: если записи ещё нет — полный бак и целая машина
 const fuelOf = (p, car = p.car) => p.fuels[car] ?? 100;
 const chpOf = (p, car = p.car) => p.chp[car] ?? 100;
 const veh = q => { const p = q.prof; q.vehSent = [Math.round(fuelOf(p)), Math.round(chpOf(p))]; send(q.ws, { t: 'veh', fuel: q.vehSent[0], chp: q.vehSent[1] }); };
 const lookOf = q => ({ ...q.prof.look, skin: q.prof.skin });
-const look = q => ({ id: q.id, name: q.prof.name, car: carOf(q), color: colorOf(q), look: lookOf(q), mode: q.mode, x: q.x, y: q.y, z: q.z, ry: q.ry, cx: q.cx, cy: q.cy, cz: q.cz, cry: q.cry });
+const look = q => ({ id: q.id, name: q.prof.name, car: carOf(q), color: colorOf(q), look: lookOf(q), fam: rp?.famTag(q) || null, w: q.w || 'fist', mode: q.mode, x: q.x, y: q.y, z: q.z, ry: q.ry, cx: q.cx, cy: q.cy, cz: q.cz, cry: q.cry });
 const carOf = q => q.test?.car || q.prof.car;
 const colorOf = q => q.test?.color || q.prof.color;
 
@@ -112,7 +114,8 @@ wss.on('connection', ws => {
     let m; try { m = JSON.parse(raw); } catch { return; }
     if (!me) {
       if (m.t !== 'hello') return;
-      let token = typeof m.token === 'string' && profiles[m.token] ? m.token : null;
+      // токен — только 32 шестнадцатеричных символа (служебные записи вроде «_families» так не открыть)
+      let token = typeof m.token === 'string' && /^[0-9a-f]{32}$/.test(m.token) && profiles[m.token] ? m.token : null;
       if (!token) { // новый персонаж: внешность выбирается один раз, только из бесплатных вещей
         token = crypto.randomBytes(16).toString('hex');
         const l = cleanLook(m.look || { outfit: m.outfit });
@@ -123,7 +126,7 @@ wss.on('connection', ws => {
       if (m.name) prof.name = cleanName(m.name);
       // старые профили: поле outfit ('thobe_red' и т.п.) превращаем в новый вид
       if (!prof.look) { prof.look = cleanLook({ outfit: prof.outfit }); delete prof.outfit; }
-      prof.wardrobe ||= []; prof.fuels ||= {}; prof.chp ||= {}; prof.tune ||= {}; prof.inv ||= {};
+      prof.wardrobe ||= []; prof.fuels ||= {}; prof.chp ||= {}; prof.tune ||= {}; prof.inv ||= {}; prof.guns ||= {};
       prof.skin ||= SKINS[1]; prof.hp ??= 100; prof.hunger ??= 100;
       if (prof.hp <= 0) prof.hp = 100;
       touch(token);
@@ -134,10 +137,11 @@ wss.on('connection', ws => {
       players.set(me.id, me);
       send(ws, { t: 'welcome', id: me.id, token, now: Date.now(), profile: pub(prof), spawn: sp, players: [...players.values()].filter(p => p !== me).map(look) });
       broadcast({ t: 'join', ...look(me) }, me);
-      veh(me);
+      veh(me); rp.onJoin(me);
       return;
     }
-    if (me.dead && m.t !== 'chat') return;
+    if (me.dead && m.t !== 'chat' && !String(m.t).startsWith('fam_')) return;
+    if (rp.handle(me, m)) return;
 
     switch (m.t) {
       case 'st': {
@@ -393,5 +397,6 @@ setInterval(() => {
 for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, async () => { await flush(); process.exit(0); });
 
 profiles = await loadAll(DATA_FILE);
+rp = initRP({ players, profiles, touch, send, broadcast, pub, vit, kill });
 console.log(`profiles: ${Object.keys(profiles).length} (${usingDb ? 'Supabase' : 'file'})`);
 server.listen(PORT, () => console.log(`Arab RP server on :${PORT}`));

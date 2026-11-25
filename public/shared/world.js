@@ -79,6 +79,24 @@ export const ITEMS = {
 export const ITEM_MAX = 10;
 export const SHOP_ITEMS = ['water', 'snack', 'medkit', 'can', 'rkit'];
 export const KIOSK_ITEMS = ['water', 'snack'];
+
+// ---------- оружие ----------
+// dmg — урон за попадание, range — дальность (м), rate — пауза между выстрелами (с), mag — патронов в пачке (покупка),
+// spread — разброс (рад), price — цена ствола, ammo — цена пачки патронов
+export const WEAPONS = {
+  fist:   { ar: 'قبضة', ru: 'Кулаки',   dmg: 6,  range: 1.9, rate: 0.5,  melee: true },
+  pistol: { ar: 'مسدس', ru: 'Пистолет', dmg: 17, range: 45,  rate: 0.32, mag: 24, spread: 0.02,  price: 3000,  ammo: 120 },
+  smg:    { ar: 'رشاش', ru: 'Пистолет-пулемёт', dmg: 10, range: 35, rate: 0.1, mag: 60, spread: 0.045, price: 7000, ammo: 250 },
+  rifle:  { ar: 'بندقية', ru: 'Автомат', dmg: 22, range: 70, rate: 0.16, mag: 60, spread: 0.025, price: 14000, ammo: 400 },
+};
+export const WEAPON_ORDER = ['fist', 'pistol', 'smg', 'rifle'];
+export const AMMO_MAX = 600;
+
+// ---------- семьи ----------
+export const FAMILY_PRICE = 25000;           // открыть свою семью
+export const FAMILY_COLORS = ['#e63946', '#f4a261', '#e9c46a', '#2a9d8f', '#4cc9f0', '#7b2cbf', '#ff70a6', '#80ed99', '#adb5bd', '#ff9f1c'];
+export const FAMILY_RANKS = 3;                // 1 — участник, 2 — заместитель, 3 — лидер
+export const cleanFamName = n => String(n || '').replace(/[\u0000-\u001f<>"'`]/g, '').trim().slice(0, 20);
 // стартовые наборы на экране входа (старые профили хранили их в поле outfit)
 export const PRESETS = {
   thobe_red: { outfit: 'thobe', head: 'shemagh' },
@@ -308,7 +326,7 @@ export function cityPoints(c) {
   }
   cands.sort((a, b) => a.d - b.d);
   const out = [];
-  const N = 11;
+  const N = 12;
   for (const p of cands) { if (out.every(q => Math.hypot(q.x - p.x, q.z - p.z) > 60)) out.push(p); if (out.length === N) break; }
   // в маленьком городе места меньше — добираем точки с меньшим отступом
   for (const p of cands) { if (out.length >= N) break; if (out.every(q => Math.hypot(q.x - p.x, q.z - p.z) > 36)) out.push(p); }
@@ -317,12 +335,41 @@ export function cityPoints(c) {
   const wh = out[4], whDrop = { x: wh.x, z: wh.z + 22 };
   return (cpCache[c.id] = {
     spawn: out[0], office: out[1], showroom: out[2], food: out[3], wh, whDrop, clothes: out[5],
-    gas: out[6], shop: out[7], tech: out[8], showroomLow: out[9], showroomHigh: out[10],
+    gas: out[6], shop: out[7], tech: out[8], showroomLow: out[9], showroomHigh: out[10], guns: out[11],
   });
 }
 export const FOOD_SPOTS = [...CITIES.map(c => cityPoints(c).food), ...STOPS.map(s => ({ x: s.gas.x + s.dx * 14, z: s.gas.z + s.dz * 14 }))];
 // заправки: одна в каждом городе и на каждой трассе (колонки)
 export const GAS_SPOTS = [...CITIES.map(c => cityPoints(c).gas), ...STOPS.map(s => ({ x: s.gas.x - s.nx * 3, z: s.gas.z - s.nz * 3 }))];
+// ---------- объекты для захвата семьями: вышки связи, ферма, завод ----------
+// место ищется подальше от трасс, городов и гор, на ровной земле (детерминированно — одинаково у всех)
+function findSpot(cx, cz, dist, seed) {
+  const R = rng(seed);
+  for (let k = 0; k < 400; k++) {
+    const a = R() * Math.PI * 2, d = dist * (0.8 + R() * 0.5), x = cx + Math.cos(a) * d, z = cz + Math.sin(a) * d;
+    if (Math.abs(x) > LIMIT - 300 || Math.abs(z) > LIMIT - 300) continue;
+    if (HWY_GRID.dist(x, z) < 90 || cityMask(x, z) > 0.02 || mountainAmount(x, z) > 0.15 || villageFlat(x, z) > 0.1) continue;
+    if (x > coastE(z) - 400 || x < coastW(z) + 400) continue;
+    const h = height(x, z), slope = Math.abs(height(x + 30, z) - h) + Math.abs(height(x, z + 30) - h);
+    if (slope > 4) continue;
+    return { x, z };
+  }
+  return { x: cx + dist, z: cz };
+}
+const hwMid = (k, t) => HIGHWAYS[k].pts[Math.floor(HIGHWAYS[k].pts.length * t)];
+export const CAPTURES = [
+  { id: 'tower1', kind: 'tower', ar: 'برج الاتصالات ١', ru: 'Вышка связи №1', income: 600, ...findSpot(...hwMid(0, 0.3), 160, 11) },
+  { id: 'tower2', kind: 'tower', ar: 'برج الاتصالات ٢', ru: 'Вышка связи №2', income: 600, ...findSpot(...hwMid(3, 0.7), 160, 12) },
+  { id: 'tower3', kind: 'tower', ar: 'برج الاتصالات ٣', ru: 'Вышка связи №3', income: 600, ...findSpot(...hwMid(5, 0.3), 160, 13) },
+  { id: 'farm', kind: 'farm', ar: 'المزرعة', ru: 'Ферма', income: 1500, ...findSpot(CITY.amman.x, CITY.amman.z, CITY.amman.r + 320, 21) },
+  { id: 'factory', kind: 'factory', ar: 'المصنع', ru: 'Завод', income: 3000, ...findSpot(CITY.riyadh.x, CITY.riyadh.z, CITY.riyadh.r + 340, 31) },
+];
+export const CAPTURE_R = 40;           // радиус зоны захвата
+export const CAPTURE_MS = 4 * 60 * 1000; // захват длится 4 минуты
+export const CAPTURE_GOAL = 120;       // столько секунд перевеса нужно, чтобы забрать объект
+export const CAPTURE_COOLDOWN = 20 * 60 * 1000; // после захвата объект 20 минут нельзя атаковать
+export const INCOME_EVERY = 10 * 60 * 1000;     // доход семье каждые 10 минут
+
 // ларьки на тротуарах: по 4 в городе, рядом с перекрёстками
 export const KIOSKS = [];
 CITIES.forEach((c, ci) => {

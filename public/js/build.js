@@ -1089,6 +1089,7 @@ export function buildWorld(scene) {
     addMarker('gas', c.id, P.gas, '#ff3b30', 'محطة وقود');
     addMarker('shop', c.id, P.shop, '#34c759', 'سوبرماركت 24/7');
     addMarker('tech', c.id, P.tech, '#ff9f0a', 'مركز صيانة');
+    addMarker('guns', c.id, P.guns, '#8e8e93', 'أسلحة');
   }
   FOOD_SPOTS.forEach(p => addMarker('food', null, p, '#ff7b39', 'شاورما'));
   for (const k of KIOSKS) addMarker('kiosk', k.city, { x: k.x, z: k.z - 1.6 }, '#ffd60a', 'كشك');
@@ -1141,6 +1142,9 @@ function iconTex(kind, color) {
       g.beginPath(); g.arc(170, 86, 30, 0.7, 5.6); g.stroke(); C(80, 176, 18); break;
     case 'clothes': // футболка
       g.beginPath(); g.moveTo(96, 64); g.lineTo(62, 92); g.lineTo(80, 122); g.lineTo(96, 112); g.lineTo(96, 192); g.lineTo(160, 192); g.lineTo(160, 112); g.lineTo(176, 122); g.lineTo(194, 92); g.lineTo(160, 64); g.quadraticCurveTo(128, 92, 96, 64); g.fill(); break;
+    case 'guns': // пистолет
+      R(56, 92, 140, 34); R(176, 84, 14, 10); g.beginPath(); g.moveTo(80, 126); g.lineTo(118, 126); g.lineTo(108, 196); g.lineTo(70, 196); g.closePath(); g.fill();
+      g.lineWidth = 10; g.beginPath(); g.arc(128, 136, 14, 0, Math.PI); g.stroke(); break;
     case 'wh': // коробка
       R(70, 92, 116, 92); g.fillStyle = color; R(122, 92, 12, 92); R(70, 128, 116, 8); break;
     case 'office': // посылка со стрелкой — доставка

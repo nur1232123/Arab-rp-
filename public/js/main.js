@@ -2,7 +2,8 @@
 import * as THREE from 'three';
 import {
   HALF, LIMIT, CITIES, CITY, CARS, COLORS, SKINS, OUTFITS, HEADS, CLOTH_COLORS, CLOTHES, PRESETS, owns, cleanLook, HIGHWAYS,
-  CAR_TIER, SHOWROOMS, GAS_SPOTS, KIOSKS, FUEL_PRICE, REPAIR_PRICE, TUNE_PRICES, ITEMS, SHOP_ITEMS, KIOSK_ITEMS, tuned, STREETS, ROAD_GRID, DAY_MS, FOOD_PRICE, TP_PRICE, LOAD_PAY,
+  CAR_TIER, SHOWROOMS, GAS_SPOTS, KIOSKS, FUEL_PRICE, REPAIR_PRICE, TUNE_PRICES, ITEMS, SHOP_ITEMS, KIOSK_ITEMS, tuned,
+  WEAPONS, WEAPON_ORDER, AMMO_MAX, FAMILY_PRICE, FAMILY_COLORS, CAPTURES, CAPTURE_R, CAPTURE_GOAL, STREETS, ROAD_GRID, DAY_MS, FOOD_PRICE, TP_PRICE, LOAD_PAY,
   height, groundY, cityMask, nearestCity, coastE, coastW, cityPoints, FOOD_SPOTS, blockAt,
 } from '../shared/world.js';
 import { buildWorld, makeTargetBeam, textSprite, U, loadWorldTextures } from './build.js';
@@ -10,7 +11,10 @@ import { makeCar, animateCar, setCarNight, loadCarModels } from './cars.js';
 import { initSound, setSoundOn, updateSound, sfx } from './sound.js';
 import { findRoute, distToRoute } from './route.js';
 import { makeShowroom } from './showroom.js';
+import { makeGun, poseWeapon, makeFx, pickTarget } from './combat.js';
+import { emote } from './human.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { makeChar, animateChar } from './char.js';
 import { loadHuman, humanReady, makeHuman, animateHuman } from './human.js';
 // настоящий персонаж, а пока он грузится — простой
@@ -44,6 +48,15 @@ const T = {
     repair: (n, p) => `إصلاح · ${n}% · ${p}$`, repaired: 'السيارة سليمة', engine: l => `المحرك · مستوى ${l}/3`, tuneUp: p => `تحسين المحرك · ${p}$`, tuneMax: 'أقصى مستوى',
     use: 'استخدم', have: n => `لديك: ${n}`, paid: p => `−${p}$`, noFuel: 'نفد البنزين! اذهب إلى محطة أو استخدم جالوناً', broken: 'السيارة معطلة! أصلحها في مركز الصيانة',
     err_full: 'لا حاجة لذلك', err_nocar: 'اقترب من سيارتك', eatNow: p => `شاورما الآن · ${p}$`, buyItem: p => `شراء · ${p}$`,
+    openGuns: 'محل الأسلحة', gunsT: 'محل الأسلحة', buyGun: p => `شراء · ${p}$`, buyAmmo: (n, p) => `ذخيرة +${n} · ${p}$`, ammoN: n => `ذخيرة: ${n}`, noAmmo: 'نفدت الذخيرة',
+    killed: (k, v) => `${k} ⟶ ${v}`, fam: 'العائلة', famCreate: 'تأسيس عائلة', famName: 'اسم العائلة', famPrice: p => `تأسيس · ${p}$`, famBank: b => `خزنة العائلة: ${b}$`,
+    famInvite: 'دعوة أقرب لاعب', famLeave: 'مغادرة العائلة', famDeposit: 'إيداع', famWithdraw: 'سحب', famAmount: 'المبلغ', famChatPh: 'رسالة للعائلة…',
+    famInvited: (f, n) => `${n} يدعوك إلى عائلة «${f}»`, accept: 'قبول', decline: 'رفض', famSent: n => `أُرسلت الدعوة إلى ${n}`, famIncome: a => `دخل العائلة +${a}$`,
+    ranks: ['', 'عضو', 'نائب', 'قائد'], promote: 'ترقية', demote: 'تخفيض', kick: 'طرد', noFamTitle: 'ليست لديك عائلة', famCaps: 'مواقع العائلة',
+    capStart: 'ابدأ الاستيلاء', capOwner: n => n ? `تابع لـ «${n}»` : 'بلا مالك', capBanner: (o, f, p, g, s) => `استيلاء: ${o} — «${f}» ${p}/${g} · ${s}`,
+    capBegin: (f, o) => `بدأت عائلة «${f}» الاستيلاء على ${o}!`, capWon: (f, o) => `عائلة «${f}» استولت على ${o}`, capLost: o => `فشل الاستيلاء على ${o}`,
+    err_famname: 'اسم قصير جداً', err_famtaken: 'هذا الاسم مأخوذ', err_infam: 'اللاعب في عائلة أخرى', err_nofam: 'أنت لست في عائلة', err_rank: 'تحتاج رتبة نائب أو قائد',
+    err_capbusy: 'الاستيلاء جارٍ بالفعل', err_capown: 'هذا الموقع لعائلتك', err_capcool: 'الموقع محمي، انتظر قليلاً', noPlayerNear: 'لا يوجد لاعب قريب',
     it: { water: ['ماء', '+10 شبع'], snack: ['سندويش', '+30 شبع'], medkit: ['حقيبة إسعاف', '+40 صحة'], can: ['جالون بنزين', '+30% بنزين'], rkit: ['عدة إصلاح', '+35% حالة السيارة'] },
     sound: 'الصوت', on: 'تشغيل', off: 'إيقاف',
     handOver: 'سلّم الطلب', customer: 'زبون', jobHint: 'انزل من السيارة وسلّم الطلب للزبون',
@@ -74,6 +87,15 @@ const T = {
     repair: (n, p) => `Починить · ${n}% · ${p}$`, repaired: 'Машина целая', engine: l => `Двигатель · уровень ${l}/3`, tuneUp: p => `Улучшить двигатель · ${p}$`, tuneMax: 'Максимум',
     use: 'Использовать', have: n => `Есть: ${n}`, paid: p => `−${p}$`, noFuel: 'Бензин кончился! Доедь до заправки или залей канистру', broken: 'Машина сломана! Почини в техцентре',
     err_full: 'Это не нужно', err_nocar: 'Подойди к своей машине', eatNow: p => `Шаурма сейчас · ${p}$`, buyItem: p => `Купить · ${p}$`,
+    openGuns: 'Оружейный магазин', gunsT: 'Оружейный магазин', buyGun: p => `Купить · ${p}$`, buyAmmo: (n, p) => `Патроны +${n} · ${p}$`, ammoN: n => `Патроны: ${n}`, noAmmo: 'Патроны кончились',
+    killed: (k, v) => `${k} ⟶ ${v}`, fam: 'Семья', famCreate: 'Открыть семью', famName: 'Название семьи', famPrice: p => `Открыть · ${p}$`, famBank: b => `Казна семьи: ${b}$`,
+    famInvite: 'Пригласить ближайшего', famLeave: 'Выйти из семьи', famDeposit: 'Положить', famWithdraw: 'Снять', famAmount: 'Сумма', famChatPh: 'Сообщение семье…',
+    famInvited: (f, n) => `${n} зовёт тебя в семью «${f}»`, accept: 'Принять', decline: 'Отказ', famSent: n => `Приглашение отправлено: ${n}`, famIncome: a => `Доход семьи +${a}$`,
+    ranks: ['', 'Участник', 'Заместитель', 'Лидер'], promote: 'Повысить', demote: 'Понизить', kick: 'Выгнать', noFamTitle: 'У тебя нет семьи', famCaps: 'Объекты семьи',
+    capStart: 'Начать захват', capOwner: n => n ? `Владелец: «${n}»` : 'Без владельца', capBanner: (o, f, p, g, s) => `Захват: ${o} — «${f}» ${p}/${g} · ${s}`,
+    capBegin: (f, o) => `Семья «${f}» начала захват: ${o}!`, capWon: (f, o) => `Семья «${f}» захватила: ${o}`, capLost: o => `Захват не удался: ${o}`,
+    err_famname: 'Слишком короткое название', err_famtaken: 'Такое название уже есть', err_infam: 'Игрок уже в другой семье', err_nofam: 'Ты не в семье', err_rank: 'Нужен ранг заместителя или лидера',
+    err_capbusy: 'Захват уже идёт', err_capown: 'Это уже объект твоей семьи', err_capcool: 'Объект под защитой, подожди', noPlayerNear: 'Рядом нет игроков',
     it: { water: ['Вода', '+10 сытости'], snack: ['Сэндвич', '+30 сытости'], medkit: ['Аптечка', '+40 здоровья'], can: ['Канистра', '+30% бензина'], rkit: ['Ремкомплект', '+35% машине'] },
     sound: 'Звук', on: 'Вкл', off: 'Выкл',
     handOver: 'Отдать заказ', customer: 'Клиент', jobHint: 'Выйди из машины и отдай заказ клиенту',
@@ -177,6 +199,7 @@ async function init() {
   const pmrem = new THREE.PMREMGenerator(renderer);
   scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
   showroom = makeShowroom(scene.environment); window.__ar.showroom = showroom;
+  fx = makeFx(scene); buildCapZones();
   buildWarehouses();
   loadHuman().then(() => { // заменяем простых человечков на настоящих
     if (me.char && me.profile) rebuildMe();
@@ -295,7 +318,8 @@ function onMsg(m) {
       const first = !me.profile;
       me.id = m.id; me.profile = m.profile; store.set('token', m.token);
       me.test = null; me.dead = false; $('test').classList.add('hide'); $('dead').classList.add('hide'); clearJob(); clearLoad();
-      timeOff = m.now - Date.now();
+      timeOff = m.now - Date.now(); srvOff = timeOff;
+      me.w = 'fist'; if (scene) setGunMesh(me, null);
       me.hp = m.profile.hp ?? 100; me.hunger = m.profile.hunger ?? 100;
       if (first) { teleport(m.spawn.x, m.spawn.z); }
       buildMe();
@@ -321,12 +345,29 @@ function onMsg(m) {
       updateHud(); break;
     }
     case 'chat': chatLine(m.name, m.m); break;
+    // ----- бой -----
+    case 'wpn': { const o = others.get(m.id); if (o) o.w = m.w; break; }
+    case 'shot': onShotMsg(m); break;
+    case 'hurt': { sfx.hurt(); const h = $('hurtFx'); h.style.opacity = 0.7; setTimeout(() => { h.style.opacity = 0; }, 180); break; }
+    case 'hitok': sfx.hitmark(); break;
+    case 'kill': killFeed(t('killed', m.killer, m.victim)); break;
+    // ----- семьи -----
+    case 'tag': { const o = others.get(m.id); if (o) setTag(o, m.fam); break; }
+    case 'fam': fam = m.fam; renderFam(); break;
+    case 'fam_invite': famInvite = m; $('famInvT').textContent = t('famInvited', m.name, m.from); $('famInv').classList.remove('hide'); break;
+    case 'fam_sent': toast(t('famSent', m.to), 1800, '#8ff0a4'); break;
+    case 'fam_msg': chatLine('[' + t('fam') + '] ' + m.name, m.m); break;
+    case 'fam_income': toast(t('famIncome', m.amount), 2000, '#8ff0a4'); break;
+    // ----- захваты -----
+    case 'caps': caps = m.caps; updateCapRings(); break;
+    case 'cap_begin': toast(t('capBegin', m.attacker, capName(m.id)), 3000, m.color); break;
+    case 'cap_end': toast(m.won ? t('capWon', m.winner, capName(m.id)) : t('capLost', capName(m.id)), 3000, '#ffd36a'); break;
     case 'kicked': kicked = true; $('dead').classList.remove('hide'); $('dead').innerHTML = `<div>${t('kicked')}</div>`; break;
     case 'profile': setProfile(m.profile); break;
     case 'bought': setProfile(m.profile); sfx.coin(); toast(t('bought'), 2500, '#8ff0a4'); break;
     case 'cloth_ok': setProfile(m.profile); sfx.coin(); toast(t('clothOk'), 1800, '#8ff0a4'); break;
     case 'veh': me.fuel = m.fuel; me.chp = m.chp; updateCarStat(); renderStore(); break;
-    case 'paid': setProfile(m.profile); sfx.coin(); toast(t('paid', m.cost), 1400, '#8ff0a4'); renderStore(); break;
+    case 'paid': setProfile(m.profile); sfx.coin(); toast(t('paid', m.cost), 1400, '#8ff0a4'); renderStore(); updateWeaponHud(); break;
     case 'used': setProfile(m.profile); me.hp = m.profile.hp; me.hunger = m.profile.hunger; sfx.eat(); renderInv(); updateHud(); break;
     case 'vit': {
       if (me.hunger > 15 && m.hunger <= 15) toast(t('hungry'), 2500, '#ffb347');
@@ -388,10 +429,11 @@ function addOther(p) {
   const o = { id: p.id, name: p.name, mode: p.mode || 0, look: { car: p.car, color: p.color, ...p.look }, t: st, c: { ...st } };
   o.char = createChar(o.look); scene.add(o.char);
   o.label = textSprite(p.name, { scale: 0.42 }); scene.add(o.label);
+  o.w = p.w || 'fist'; setTag(o, p.fam);
   others.set(p.id, o); rebuildOtherCar(o);
 }
 function rebuildOtherCar(o) { if (o.car) scene.remove(o.car); o.car = makeCar(o.look.car, o.look.color); scene.add(o.car); }
-function removeOther(id) { const o = others.get(id); if (!o) return; scene.remove(o.char, o.car, o.label); others.delete(id); }
+function removeOther(id) { const o = others.get(id); if (!o) return; scene.remove(o.char, o.car, o.label); if (o.gun) scene.remove(o.gun); if (o.famLabel) scene.remove(o.famLabel); others.delete(id); }
 
 // ---------- управление ----------
 const joy = $('joy'), knob = $('knob'); let joyId = null;
@@ -420,7 +462,11 @@ $('bHorn').onclick = () => sfx.horn();
 
 // обзор пальцем/мышью по экрану
 const gl = $('gl'); const drags = new Map();
-gl.addEventListener('pointerdown', e => { drags.set(e.pointerId, { x: e.clientX, y: e.clientY }); gl.setPointerCapture(e.pointerId); });
+gl.addEventListener('pointerdown', e => {
+  drags.set(e.pointerId, { x: e.clientX, y: e.clientY }); gl.setPointerCapture(e.pointerId);
+  if (e.pointerType === 'mouse' && e.button === 0 && me.profile && !shopOpen()) fireHeld = true; // на компьютере ЛКМ — огонь (и обзор мышью)
+});
+gl.addEventListener('pointerup', e => { if (e.pointerType === 'mouse') fireHeld = false; });
 gl.addEventListener('pointermove', e => {
   const d = drags.get(e.pointerId); if (!d) return;
   const k = e.pointerType === 'mouse' ? 0.006 : 0.008;
@@ -441,6 +487,11 @@ addEventListener('keydown', e => {
   if (e.code === 'KeyM') toggleModal('map');
   if (e.code === 'KeyC') cam.mode = (cam.mode + 1) % 3;
   if (e.code === 'KeyH' && me.mode === 'car') sfx.horn();
+  // оружие: 1–4 — выбрать, Q — следующее, G — семья
+  const wk = { Digit1: 'fist', Digit2: 'pistol', Digit3: 'smg', Digit4: 'rifle' }[e.code];
+  if (wk && me.profile) equip(wk);
+  if (e.code === 'KeyQ' && me.profile) cycleWeapon();
+  if (e.code === 'KeyG' && me.profile) openFam();
   if (e.code === 'Escape') closeModals();
   if (e.code === 'KeyT' || e.code === 'Enter') { e.preventDefault(); openChat(); }
 });
@@ -454,6 +505,11 @@ $('bMap').onclick = () => toggleModal('map');
 $('bSet').onclick = () => toggleModal('settings');
 $('bChat').onclick = () => openChat();
 $('bInv').onclick = () => openInv();
+$('bFam').onclick = () => openFam();
+$('bWpn').onclick = () => cycleWeapon();
+hold('bFire', () => { fireHeld = true; fire(performance.now()); }, () => { fireHeld = false; });
+$('famAcc').onclick = () => { net({ t: 'fam_accept' }); $('famInv').classList.add('hide'); };
+$('famDec').onclick = () => { famInvite = null; $('famInv').classList.add('hide'); };
 $('bCar').onclick = () => summonCar();
 $('jobX').onclick = () => { if (me.load) { net({ t: 'load_cancel' }); clearLoad(); } else { net({ t: 'job_cancel' }); clearJob(); } };
 $('testX').onclick = () => net({ t: 'test_stop' });
@@ -494,6 +550,8 @@ function setMode(m) {
   $('carStat').classList.toggle('hide', m !== 'car' || !!me.test);
   $('footBtns').classList.toggle('hide', m !== 'foot');
   $('carBtns').classList.toggle('hide', m !== 'car');
+  if (m !== 'foot') fireHeld = false;
+  updateWeaponHud();
   $('speedo').classList.toggle('hide', m !== 'car');
   if (me.char) me.char.visible = m === 'foot';
 }
@@ -786,6 +844,15 @@ function renderStore() {
     const s0 = CARS[car], s1 = tuned(car, Math.min(3, lvl + 1));
     row(t('engine', lvl), `${Math.round(tuned(car, lvl).max * 3.6)} → ${Math.round(s1.max * 3.6)} ${t('kmh')} · ${t('accel')} +${Math.round((s1.accel / s0.accel - 1) * 100)}%`,
       lvl >= 3 ? t('tuneMax') : t('tuneUp', TUNE_PRICES[lvl].toLocaleString('en-US')), () => net({ t: 'tune' }), lvl >= 3 || P.money < (TUNE_PRICES[lvl] || 0));
+  } else if (storeKind === 'guns') {
+    const G = P.guns || {};
+    for (const id of WEAPON_ORDER) {
+      const W = WEAPONS[id]; if (W.melee) continue;
+      const has = id in G, name = lang === 'ru' ? W.ru : W.ar;
+      const ammoCost = W.ammo, full = (G[id] || 0) >= AMMO_MAX;
+      row(name, `${t('ammoN', G[id] || 0)} · ${W.dmg} dmg`, has ? (full ? t('fuelFull').split(' ')[0] : t('buyAmmo', W.mag, ammoCost)) : t('buyGun', W.price),
+        () => net({ t: 'gun_buy', w: id }), has ? (full || P.money < ammoCost) : P.money < W.price);
+    }
   } else {
     if (storeKind === 'kiosk') row(t('eat', FOOD_PRICE).split('·')[0], '+45', t('eatNow', FOOD_PRICE), () => net({ t: 'eat' }), P.money < FOOD_PRICE);
     for (const id of storeKind === 'kiosk' ? KIOSK_ITEMS : SHOP_ITEMS) {
@@ -793,7 +860,7 @@ function renderStore() {
       row(t('it')[id][0], t('it')[id][1] + ' · ' + t('have', n), t('buyItem', ITEMS[id].price), () => net({ t: 'shop_buy', item: id }), P.money < ITEMS[id].price || n >= 10);
     }
   }
-  $('storeT').textContent = { gas: t('gasT'), tech: t('techT'), shop: t('shop24'), kiosk: t('kiosk') }[storeKind];
+  $('storeT').textContent = { gas: t('gasT'), tech: t('techT'), shop: t('shop24'), kiosk: t('kiosk'), guns: t('gunsT') }[storeKind];
   $('storeList').innerHTML = rows.map((r, i) => `<div class="srow"><div><b>${r.title}</b><small>${r.sub}</small></div><button data-r="${i}" ${r.dis ? 'disabled' : ''}>${r.btn}</button></div>`).join('');
   $('storeList').querySelectorAll('[data-r]').forEach(b => b.onclick = () => rows[+b.dataset.r].on?.());
 }
@@ -804,6 +871,227 @@ function renderInv() {
   $('invList').innerHTML = ids.length ? ids.map(id => `<div class="srow"><div><b>${t('it')[id][0]} × ${inv[id]}</b><small>${t('it')[id][1]}</small></div><button data-use="${id}">${t('use')}</button></div>`).join('') : `<div class="srow"><small>${t('invEmpty')}</small></div>`;
   $('invList').querySelectorAll('[data-use]').forEach(b => b.onclick = () => net({ t: 'use', item: b.dataset.use }));
 }
+// ---------- бой ----------
+let fx = null, fireHeld = false, lastShot = 0, lockT = null, srvOff = 0;
+Object.assign(me, { w: 'fist', gun: null, aimT: 0, aimDir: new THREE.Vector3(0, 0, 1) });
+const ownedWeapons = () => ['fist', ...WEAPON_ORDER.filter(w => w !== 'fist' && me.profile?.guns?.[w] !== undefined)];
+function setGunMesh(holder, w) {
+  if (holder.gun) { scene.remove(holder.gun); holder.gun = null; }
+  if (w && w !== 'fist') { holder.gun = makeGun(w); holder.gun.userData.type = w; scene.add(holder.gun); }
+}
+function equip(w) {
+  if (!ownedWeapons().includes(w)) w = 'fist';
+  me.w = w; setGunMesh(me, w); net({ t: 'equip', w }); updateWeaponHud();
+}
+function cycleWeapon() { const list = ownedWeapons(); equip(list[(list.indexOf(me.w) + 1) % list.length]); }
+function updateWeaponHud() {
+  const W = WEAPONS[me.w], ammo = me.profile?.guns?.[me.w];
+  $('bWpn').querySelector('b').textContent = lang === 'ru' ? W.ru : W.ar;
+  $('bWpn').querySelector('small').textContent = W.melee ? '' : String(ammo ?? 0);
+  const armed = me.mode === 'foot' && !me.dead;
+  $('bFire').classList.toggle('hide', !armed);
+  $('xhair').classList.toggle('hide', !armed || W.melee);
+}
+// стена между двумя точками? (шагаем по лучу и смотрим здания)
+function wallBetween(a, b) {
+  const d = a.distanceTo(b), n = Math.ceil(d / 1.2);
+  for (let i = 1; i < n; i++) {
+    const k = i / n, x = a.x + (b.x - a.x) * k, y = a.y + (b.y - a.y) * k, z = a.z + (b.z - a.z) * k;
+    if (y < height(x, z)) return true;
+    for (const bb of world.near(x, z, 0.3)) if (!bb.small && y < bb.y1 && x > bb.x0 && x < bb.x1 && z > bb.z0 && z < bb.z1) return true;
+  }
+  return false;
+}
+function fire(now) {
+  if (me.mode !== 'foot' || me.dead || shopOpen()) return;
+  const W = WEAPONS[me.w];
+  if (now - lastShot < W.rate * 1000) return;
+  lastShot = now;
+  if (!W.melee && !(me.profile.guns[me.w] > 0)) { toast(t('noAmmo'), 1200, '#ff8a7a'); sfx.error(); fireHeld = false; return; }
+  const from = new THREE.Vector3(me.x, (me.visY ?? me.y) + 1.45, me.z);
+  const fwd = camera.getWorldDirection(new THREE.Vector3());
+  // автонаводка: ближайший игрок в конусе перед камерой, без стены между нами
+  const tg = W.melee ? pickTarget(from, new THREE.Vector3(Math.sin(me.ry), 0, Math.cos(me.ry)), others, 2.0, 1.1)
+    : pickTarget(from, fwd, others, W.range, mobile ? 0.55 : 0.32, wallBetween);
+  const dir = tg ? tg.p.clone().sub(from).normalize() : fwd.clone();
+  if (!W.melee) { const s = W.spread * (tg ? 0.6 : 1); dir.x += (Math.random() - 0.5) * s; dir.y += (Math.random() - 0.5) * s; dir.z += (Math.random() - 0.5) * s; dir.normalize(); }
+  // промах тем вероятнее, чем дальше цель и хуже оружие
+  const hit = tg && (W.melee || Math.random() > (W.spread * 4 + tg.d / W.range * 0.35)) ? tg.o.id : null;
+  me.ry = Math.atan2(dir.x, dir.z); me.aimDir.copy(dir); me.aimT = 0.9;
+  net({ t: 'shoot', w: me.w, dir: [+dir.x.toFixed(3), +dir.y.toFixed(3), +dir.z.toFixed(3)], hit });
+  if (W.melee) { if (me.char.userData.human) emote(me.char, 'Punch_Jab'); sfx.punch(); return; }
+  me.profile.guns[me.w]--; updateWeaponHud();
+  shotFx(me.gun, dir, hit ? tg.p : null, from, W.range, true, me.w);
+}
+// вспышка у ствола, трассер, облачко в месте попадания, звук
+function shotFx(gun, dir, hitP, from, range, mine, w) {
+  const muzzle = gun ? gun.position.clone().addScaledVector(dir, gun.userData.muzzle || 0.3) : from.clone();
+  let end = hitP ? hitP.clone() : from.clone().addScaledVector(dir, range);
+  if (!hitP) { // упрёмся в стену или землю — там облачко
+    const n = Math.ceil(range / 1.5);
+    for (let i = 1; i <= n; i++) { const p = from.clone().addScaledVector(dir, i * 1.5); if (wallBetween(from, p)) { end = p; break; } }
+  }
+  fx.flash(muzzle); fx.tracer(muzzle, end); fx.puff(end);
+  const d = mine ? 0 : Math.hypot(from.x - camera.position.x, from.z - camera.position.z);
+  sfx.gun(w, Math.max(0, 1 - d / 180));
+}
+function onShotMsg(m) {
+  const o = others.get(m.id); if (!o) return;
+  const dir = new THREE.Vector3(...m.d), from = new THREE.Vector3(...m.o);
+  o.aimDir = dir; o.aimT = 0.9; o.w = m.w;
+  if (WEAPONS[m.w]?.melee) { if (o.char.userData.human) emote(o.char, 'Punch_Jab'); return; }
+  const tgt = m.hit === me.id ? new THREE.Vector3(me.x, (me.visY ?? me.y) + 1.1, me.z) : m.hit && others.get(m.hit) ? new THREE.Vector3(others.get(m.hit).c.x, others.get(m.hit).c.y + 1.1, others.get(m.hit).c.z) : null;
+  shotFx(o.gun, dir, tgt, from, WEAPONS[m.w]?.range || 40, false, m.w);
+}
+function killFeed(text) {
+  const d = document.createElement('div'); d.textContent = text; $('feed').prepend(d);
+  while ($('feed').children.length > 4) $('feed').lastChild.remove();
+  setTimeout(() => d.remove(), 6000);
+}
+// каждый кадр: оружие в руках у меня и у других, прицел, метка цели
+function updateCombat(dt, now) {
+  fx?.update(dt);
+  if (fireHeld) fire(now);
+  me.aimT = Math.max(0, me.aimT - dt);
+  if (me.gun) { me.gun.visible = me.mode === 'foot' && !me.dead; if (me.gun.visible) poseWeapon(me.char, me.gun, me.aimDir, me.aimT > 0); }
+  for (const o of others.values()) {
+    if ((o.w || 'fist') !== (o.gun?.userData.type || 'fist')) setGunMesh(o, o.w);
+    if (!o.gun) continue;
+    o.aimT = Math.max(0, (o.aimT || 0) - dt);
+    o.gun.visible = !o.mode && o.char.visible;
+    if (o.gun.visible) poseWeapon(o.char, o.gun, o.aimDir || new THREE.Vector3(0, 0, 1), o.aimT > 0);
+  }
+  // метка автонаводки над целью
+  const W = WEAPONS[me.w], lk = $('lock');
+  if (frame % 6 === 0) {
+    lockT = null;
+    if (me.mode === 'foot' && !me.dead && !W.melee) {
+      const from = new THREE.Vector3(me.x, (me.visY ?? me.y) + 1.45, me.z);
+      lockT = pickTarget(from, camera.getWorldDirection(new THREE.Vector3()), others, W.range, mobile ? 0.55 : 0.32, wallBetween);
+    }
+  }
+  if (lockT) {
+    const p = lockT.p.clone().project(camera);
+    lk.style.transform = `translate(${(p.x * 0.5 + 0.5) * innerWidth - 18}px, ${(-p.y * 0.5 + 0.5) * innerHeight - 18}px)`;
+    lk.classList.toggle('hide', p.z > 1);
+  } else lk.classList.add('hide');
+}
+
+// ---------- семья ----------
+let fam = null, famInvite = null, caps = [], capHere = null;
+function openFam() { closeModals(); $('famM').classList.remove('hide'); net({ t: 'fam_get' }); renderFam(); }
+function renderFam() {
+  if ($('famM').classList.contains('hide')) return;
+  const box = $('famBody');
+  if (!fam) {
+    box.innerHTML = `<p>${t('noFamTitle')}</p><input id="famNameIn" maxlength="20" placeholder="${t('famName')}">
+      <div class="sw" id="famCols">${FAMILY_COLORS.map((c, i) => `<button style="background:${c}" data-fc="${c}" class="${i === 0 ? 'on' : ''}"></button>`).join('')}</div>
+      <button class="play" id="famMake">${t('famPrice', FAMILY_PRICE.toLocaleString('en-US'))}</button>`;
+    let col = FAMILY_COLORS[0];
+    box.querySelectorAll('[data-fc]').forEach(b => b.onclick = () => { col = b.dataset.fc; box.querySelectorAll('[data-fc]').forEach(x => x.classList.toggle('on', x === b)); });
+    $('famMake').disabled = me.profile.money < FAMILY_PRICE;
+    $('famMake').onclick = () => net({ t: 'fam_create', name: $('famNameIn').value, color: col });
+    return;
+  }
+  const lead = fam.myRank === 3;
+  box.innerHTML = `<h3 style="color:${fam.color};margin:0 0 4px">${esc(fam.name)}</h3><div>${t('famBank', fam.bank.toLocaleString('en-US'))}</div>
+    <div class="srow"><input id="famAmt" type="number" min="1" placeholder="${t('famAmount')}"><button id="famDep">${t('famDeposit')}</button>${lead ? `<button id="famWd">${t('famWithdraw')}</button>` : ''}</div>
+    ${fam.caps.length ? `<div>${t('famCaps')}: ${fam.caps.map(id => esc(capName(id))).join(', ')}</div>` : ''}
+    <div id="famMembers">${fam.members.map(mb => `<div class="srow"><div><b>${mb.online ? '🟢' : '⚪'} ${esc(mb.name)}</b><small>${t('ranks')[mb.rank]}</small></div><div>${lead && mb.rank < 3 ? `<button data-pr="${mb.key}" data-r="${mb.rank === 1 ? 2 : 1}">${mb.rank === 1 ? t('promote') : t('demote')}</button><button data-kk="${mb.key}">${t('kick')}</button>` : (fam.myRank > mb.rank && fam.myRank >= 2 ? `<button data-kk="${mb.key}">${t('kick')}</button>` : '')}</div></div>`).join('')}</div>
+    <div class="srow"><input id="famChatIn" maxlength="140" placeholder="${t('famChatPh')}"><button id="famSay">${t('send')}</button></div>
+    <div class="srow">${fam.myRank >= 2 ? `<button id="famInvBtn">${t('famInvite')}</button>` : ''}<button id="famLv">${t('famLeave')}</button></div>`;
+  $('famDep').onclick = () => net({ t: 'fam_deposit', amount: +$('famAmt').value });
+  if (lead) $('famWd').onclick = () => net({ t: 'fam_withdraw', amount: +$('famAmt').value });
+  box.querySelectorAll('[data-pr]').forEach(b => b.onclick = () => net({ t: 'fam_rank', key: b.dataset.pr, rank: +b.dataset.r }));
+  box.querySelectorAll('[data-kk]').forEach(b => b.onclick = () => net({ t: 'fam_kick', key: b.dataset.kk }));
+  $('famSay').onclick = () => { const v = $('famChatIn').value.trim(); if (v) net({ t: 'fam_chat', m: v }); $('famChatIn').value = ''; };
+  if ($('famInvBtn')) $('famInvBtn').onclick = () => {
+    let best = null, bd = 8; for (const o of others.values()) { const d = Math.hypot(o.c.x - me.x, o.c.z - me.z); if (d < bd) { bd = d; best = o; } }
+    if (best) net({ t: 'fam_invite', id: best.id }); else toast(t('noPlayerNear'), 1500);
+  };
+  $('famLv').onclick = () => net({ t: 'fam_leave' });
+}
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+function setTag(o, tag) {
+  if (o.famLabel) { scene.remove(o.famLabel); o.famLabel = null; }
+  o.fam = tag; if (tag) { o.famLabel = textSprite(tag.name, { color: tag.color, scale: 0.34 }); scene.add(o.famLabel); }
+}
+
+// ---------- захваты ----------
+// зона захвата: кольцо по земле и флаг на мачте — цвета семьи-владельца (серые, если ничьи)
+const capZones = {};
+// постройка объекта захвата одной сеткой (один draw call): вышка связи, ферма или завод
+function capProp(kind) {
+  const parts = [];
+  const put = (geo, col, x, y, z, ry = 0, rz = 0) => {
+    geo = geo.toNonIndexed(); geo.rotateZ(rz); geo.rotateY(ry); geo.translate(x, y, z);
+    const c = new THREE.Color(col), n = geo.attributes.position.count, a = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) { a[i * 3] = c.r; a[i * 3 + 1] = c.g; a[i * 3 + 2] = c.b; }
+    geo.setAttribute('color', new THREE.BufferAttribute(a, 3)); geo.deleteAttribute('uv'); parts.push(geo);
+  };
+  const B = (w, h, d) => new THREE.BoxGeometry(w, h, d), Cy = (r1, r2, h, s = 10) => new THREE.CylinderGeometry(r1, r2, h, s);
+  if (kind === 'tower') { // решётчатая вышка: 4 наклонные опоры, перекладины, антенны и красный огонь
+    const H = 34;
+    for (const [sx, sz] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) {
+      const leg = B(0.35, H, 0.35); leg.rotateX(-sz * 0.07); leg.rotateZ(sx * 0.07); leg.translate(sx * 1.6, H / 2, sz * 1.6);
+      put(leg, '#b9bcc0', 0, 0, 0);
+    }
+    for (let y = 3; y < H; y += 4) { const w = 4.6 - y * 0.11; put(B(w, 0.2, 0.2), '#c94b3b', 0, y, w / 2 - 0.2); put(B(w, 0.2, 0.2), '#c94b3b', 0, y, -w / 2 + 0.2); put(B(0.2, 0.2, w), '#c94b3b', w / 2 - 0.2, y, 0); put(B(0.2, 0.2, w), '#c94b3b', -w / 2 + 0.2, y, 0); }
+    put(Cy(0.08, 0.08, 8, 5), '#dddddd', 0, H + 4, 0); put(B(1.2, 1.6, 0.3), '#eeeeee', 0.9, H - 3, 0); put(B(0.3, 1.6, 1.2), '#eeeeee', 0, H - 6, 0.9);
+    put(new THREE.SphereGeometry(0.35, 8, 6), '#ff2a1a', 0, H + 8.2, 0);
+    put(B(5, 3, 4), '#d8d2c4', 6, 1.5, 0); // будка с аппаратурой
+  } else if (kind === 'farm') { // амбар, силос, поля, забор
+    put(B(14, 6, 9), '#9c3b2a', -6, 3, 4); put(B(14.4, 0.5, 6), '#5b4636', -6, 7.4, 6.2, 0, 0); put(B(14.4, 0.5, 6), '#5b4636', -6, 7.4, 1.8);
+    put(Cy(2.6, 2.6, 13, 14), '#cfd3d6', 6, 6.5, 6); put(new THREE.SphereGeometry(2.6, 14, 6, 0, Math.PI * 2, 0, Math.PI / 2), '#a9adb0', 6, 13, 6);
+    for (let i = 0; i < 6; i++) put(B(28, 0.25, 1.4), i % 2 ? '#6f8f3a' : '#8aa84a', 0, 0.12, -6 - i * 2.4);
+    for (let x = -15; x <= 15; x += 3) put(B(0.2, 1.2, 0.2), '#7a5a3a', x, 0.6, -21);
+    put(B(30, 0.15, 0.1), '#7a5a3a', 0, 1.0, -21);
+    put(B(3.2, 1.6, 2), '#2e6b3a', 2, 0.8, 12); put(Cy(0.7, 0.7, 0.5, 10), '#222', 0.8, 0.7, 13.1, 0, Math.PI / 2); // трактор
+  } else { // завод: цеха, трубы, цистерны
+    put(B(24, 9, 14), '#8d8f91', -4, 4.5, 0); put(B(24.4, 0.6, 14.4), '#5c5f62', -4, 9.3, 0);
+    for (let i = 0; i < 4; i++) put(B(5.4, 1.6, 14.2), '#6f7376', -14 + i * 6.5, 10.4, 0);
+    put(B(12, 6, 10), '#a39e93', 14, 3, -2);
+    put(Cy(1.2, 1.6, 26, 12), '#9a6a4f', 6, 13, 7); put(Cy(1.0, 1.4, 22, 12), '#9a6a4f', 10, 11, 8);
+    put(Cy(1.32, 1.32, 1.2, 12), '#ffffff', 6, 23, 7); put(Cy(1.12, 1.12, 1.2, 12), '#ffffff', 10, 19, 8);
+    put(Cy(2.4, 2.4, 6, 14), '#d4d6d8', -14, 3, 11); put(Cy(2.4, 2.4, 6, 14), '#d4d6d8', -8, 3, 11);
+    put(B(0.4, 0.4, 14), '#555', 2, 7, 4);
+  }
+  const geo = mergeGeometries(parts); geo.computeVertexNormals();
+  const m = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ vertexColors: true }));
+  m.castShadow = m.receiveShadow = true; return m;
+}
+function buildCapZones() {
+  for (const c of CAPTURES) {
+    const gy = height(c.x, c.z);
+    const prop = capProp(c.id.startsWith('tower') ? 'tower' : c.id); prop.position.set(c.x + 12, gy, c.z + 12); scene.add(prop);
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(CAPTURE_R, 0.25, 6, 96).rotateX(Math.PI / 2), new THREE.MeshBasicMaterial({ color: '#9aa0a6', transparent: true, opacity: 0.8 }));
+    ring.position.set(c.x, gy + 0.4, c.z);
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 12, 6).translate(0, 6, 0), new THREE.MeshLambertMaterial({ color: '#cccccc' }));
+    pole.position.set(c.x, gy, c.z);
+    const flag = new THREE.Mesh(new THREE.PlaneGeometry(4, 2.4).translate(2, 10.6, 0), new THREE.MeshLambertMaterial({ color: '#9aa0a6', side: THREE.DoubleSide }));
+    flag.position.set(c.x, gy, c.z);
+    const label = textSprite(lang === 'ru' ? c.ru : c.ar, { color: '#fff', scale: 0.8 }); label.position.set(c.x, gy + 14, c.z);
+    scene.add(ring, pole, flag, label);
+    capZones[c.id] = { ring, flag, label, objs: [prop, ring, pole, flag, label], x: c.x, z: c.z };
+  }
+}
+function updateCapRings() {
+  for (const s of caps) {
+    const z = capZones[s.id]; if (!z) continue;
+    const col = s.active ? s.active.color : s.owner ? s.owner.color : '#9aa0a6';
+    z.ring.material.color.set(col); z.flag.material.color.set(s.owner ? s.owner.color : '#9aa0a6');
+  }
+}
+const capName = id => { const c = CAPTURES.find(x => x.id === id); return c ? (lang === 'ru' ? c.ru : c.ar) : id; };
+function updateCapsHud(now) {
+  const near = caps.find(c => c.active && (Math.hypot(CAPTURES.find(x => x.id === c.id).x - me.x, CAPTURES.find(x => x.id === c.id).z - me.z) < 400));
+  const b = $('capBar');
+  if (!near) { b.classList.add('hide'); return; }
+  const s = Math.max(0, Math.round((near.active.endsAt - (Date.now() + srvOff)) / 1000)), mm = Math.floor(s / 60), ss = String(s % 60).padStart(2, '0');
+  b.textContent = t('capBanner', capName(near.id), near.active.attacker, near.active.progress, CAPTURE_GOAL, `${mm}:${ss}`);
+  b.style.borderColor = near.active.color; b.classList.remove('hide');
+}
+
 // бензин и состояние машины — рядом со спидометром
 function updateCarStat() {
   $('fuelF').style.width = clamp(me.fuel, 0, 100) + '%'; $('fuelF').classList.toggle('low', me.fuel < 15);
@@ -1072,16 +1360,21 @@ function loop(now) {
     if (!o.mode) { o.char.position.set(c.x, c.y, c.z); o.char.rotation.y = c.ry; animChar(o.char, Math.abs(tg.s), !!tg.a, dt, now / 1000); }
     const lx = o.mode ? c.cx : c.x, lz = o.mode ? c.cz : c.z;
     o.label.position.set(lx, (o.mode ? o.car.position.y + 2.6 : c.y + 2.25), lz);
+    if (o.famLabel) { o.famLabel.position.set(lx, o.label.position.y + 0.55, lz); o.famLabel.visible = o.label.visible; }
     { const dl = Math.hypot(lx - camera.position.x, lz - camera.position.z); o.label.visible = dl < 120 && dl > 3; }
   }
 
+  updateCombat(dt, now);
   updateCam(dt, now);
+  if (frame % 10 === 0) updateCapsHud(now);
   const [ax, az] = activePos();
   updateSky(ax, az);
   if (world.flag) world.flag.rotation.y = Math.sin(now / 900) * 0.12;
 
   // детали рядом (LOD)
   // на «низкой» графике мелочь видна ближе: телефон не тянет все детали большого города
+  // объекты захвата на «низкой» видно только в пределах 500 м
+  if (frame % 15 === 7) for (const z of Object.values(capZones)) { const v = quality === 'high' || Math.hypot(z.x - camera.position.x, z.z - camera.position.z) < 500; for (const o of z.objs) o.visible = v; }
   if (frame % 15 === 0) { const R = quality === 'high' ? 700 : 260; for (const l of world.lod) l.m.visible = Math.hypot(l.x - camera.position.x, l.z - camera.position.z) < (l.far ? R + 700 : R + 280); world.updateScatter(camera.position.x, camera.position.z, quality === 'high' ? 1800 : 700); }
 
   // маркеры, действия
@@ -1100,11 +1393,18 @@ function loop(now) {
     else if (nearMk?.kind === 'clothes' && !inCar && !me.test) label = t('openClothes');
     else if (nearMk?.kind === 'tech' && !me.test) label = t('openTech');
     else if (nearMk?.kind === 'shop' && !inCar) label = t('openShop24');
+    else if (nearMk?.kind === 'guns' && !inCar) label = t('openGuns');
     else if ((nearMk?.kind === 'kiosk' || nearMk?.kind === 'food') && !inCar) label = t('openKiosk');
     else if (!me.test) { // колонки на заправке: можно подъехать прямо на машине
       if (GAS_SPOTS.some(g => Math.hypot(g.x - ax, g.z - az) < (inCar ? 10 : 6))) label = t('openGas');
     }
     if (!label && !inCar && !me.load && Math.hypot(car.x - me.x, car.z - me.z) < 3.6) label = t('enterCar');
+    // зона захвата: лидер или заместитель семьи может начать захват
+    if (!label && !inCar && fam && fam.myRank >= 2) {
+      const c = CAPTURES.find(c => Math.hypot(c.x - me.x, c.z - me.z) < CAPTURE_R);
+      const s = c && caps.find(s => s.id === c.id);
+      if (c && !s?.active && s?.owner?.name !== fam.name) { label = t('capStart'); capHere = c.id; }
+    }
     if (label) { if (act.textContent !== label) act.textContent = label; act.classList.remove('hide'); } else act.classList.add('hide');
   }
   // маркеры видно только вблизи (дальние показывает радар) — так меньше нагрузка на телефон
@@ -1149,6 +1449,8 @@ $('action').onclick = () => {
   if (label === t('openShop24')) return openStore('shop');
   if (label === t('openKiosk')) return openStore('kiosk');
   if (label === t('openGas')) return openStore('gas');
+  if (label === t('openGuns')) return openStore('guns');
+  if (label === t('capStart')) return net({ t: 'cap_start', id: capHere });
   if (label === t('openClothes')) return openWardrobe();
   if (label === t('eat', FOOD_PRICE)) return net({ t: 'eat' });
   if (me.mode === 'foot') toggleCar();
